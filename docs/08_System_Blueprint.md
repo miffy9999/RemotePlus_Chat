@@ -1,0 +1,202 @@
+# 호텔–콜센터 채팅 시스템 설계도
+
+## 1. 이 문서의 목적
+
+이 문서는 프로그램을 처음 보는 사람이 각 화면, 서버 모듈, 데이터베이스와 실시간 이벤트가 어떻게 연결되는지 한눈에 이해하도록 돕는다. 상세 구현이 바뀌면 이 설계도도 함께 갱신한다.
+
+## 2. 전체 구조
+
+```mermaid
+flowchart LR
+    Admin["관리자 웹\nAgent·호텔·룸 관리"]
+    Agent["Agent 웹\n상담 목록·실시간 채팅"]
+    Guest["투숙객 웹\n테스트 링크·실시간 채팅"]
+
+    REST["REST API\n인증·관리·세션 조회"]
+    WS["WebSocket\n입장·메시지·상태 알림"]
+    Expire["세션 만료 작업\n15분 제한"]
+    DB[("데이터베이스")]
+
+    Admin --> REST
+    Agent --> REST
+    Guest --> REST
+    Agent <--> WS
+    Guest <--> WS
+    REST --> DB
+    WS --> DB
+    Expire --> DB
+    Expire --> WS
+```
+
+## 3. 화면 영역
+
+### 관리자 페이지
+
+- 관리자 로그인과 권한 확인
+- Agent 목록 및 추가
+- 호텔 추가와 호텔 필터
+- 호텔별 룸 추가 및 테이블 조회
+- 향후 룸별 QR 생성·확인·다운로드·폐기·재생성
+
+QR 기능은 MVP 이후 범위다. 초기에는 테스트용 접근 링크 또는 접근 키로 투숙객 흐름을 검증한다.
+
+### Agent 페이지
+
+- Agent 로그인
+- 대기, 진행, 종료 상담 목록
+- 상담 수락
+- 실시간 메시지 송수신
+- 객실, 언어, 상담 상태, 남은 시간 확인
+- 상담 수동 종료
+
+### 투숙객 페이지
+
+- 테스트 링크 또는 접근 키 검증
+- 새 상담 생성
+- 상담원 연결 대기
+- 실시간 메시지 송수신
+- 연결 상태와 남은 시간 확인
+- 종료 후 입력 차단
+
+## 4. 서버 모듈 책임
+
+| 모듈 | 주요 책임 |
+|---|---|
+| `auth` | 관리자·Agent 인증, 토큰 검증, 역할별 접근 제어 |
+| `rooms` | 호텔, 룸, 룸 접근 키 관리 |
+| `chat-sessions` | 상담 생성, 수락, 조회, 종료, 상태 전환 |
+| `messages` | 메시지 검증, 저장, 조회, 중복 방지 |
+| `realtime` | WebSocket 인증, 채팅방 입장, 이벤트 전달, 재연결 |
+| `notifications` | 새 상담과 새 메시지의 화면 알림 및 알림음 |
+| `operations` | 로그, 헬스 체크, 감사 기록 |
+| `jobs` | 만료 대상 검색과 15분 자동 종료 |
+
+## 5. 핵심 상담 상태
+
+```mermaid
+stateDiagram-v2
+    [*] --> WAITING: 투숙객이 상담 생성
+    WAITING --> ACTIVE: Agent가 상담 수락
+    WAITING --> EXPIRED: 대기 중 만료
+    ACTIVE --> CLOSED: Agent가 정상 종료
+    ACTIVE --> EXPIRED: 15분 만료
+    CLOSED --> [*]
+    EXPIRED --> [*]
+```
+
+서버는 메시지를 저장하기 직전에 세션이 `ACTIVE`인지, 현재 시각이 `expiresAt` 이전인지 다시 확인한다. 화면의 타이머는 안내용이며 최종 판단 기준이 아니다.
+
+## 6. 메시지 처리 흐름
+
+```mermaid
+sequenceDiagram
+    participant C as 보내는 사용자
+    participant W as WebSocket 서버
+    participant S as 세션·메시지 서비스
+    participant D as 데이터베이스
+    participant R as 받는 사용자
+
+    C->>W: chat:message
+    W->>S: 인증 정보와 메시지 전달
+    S->>S: 권한·상태·만료·길이·중복 검사
+    S->>D: 메시지 저장
+    D-->>S: 저장 결과
+    S-->>W: 저장된 메시지
+    W-->>C: chat:message-accepted
+    W-->>R: chat:message
+```
+
+## 7. 데이터 관계
+
+```mermaid
+erDiagram
+    HOTEL ||--o{ ROOM : contains
+    ROOM ||--o{ ROOM_ACCESS_KEY : has
+    ROOM ||--o{ CHAT_SESSION : creates
+    AGENT ||--o{ CHAT_SESSION : handles
+    CHAT_SESSION ||--o{ MESSAGE : contains
+```
+
+구체적인 컬럼과 제약조건은 `04_Database_Design.md`에서 관리한다.
+
+## 8. 반드시 지켜야 할 경계
+
+- 관리자와 Agent API는 역할 권한을 분리한다.
+- WebSocket 연결 시에도 REST 로그인과 독립적으로 토큰을 검증한다.
+- 모든 채팅 이벤트는 요청자가 해당 세션에 참여할 권한이 있는지 확인한다.
+- 메시지는 데이터베이스 저장 성공 후 상대방에게 전파한다.
+- 종료 또는 만료된 세션은 REST와 WebSocket 양쪽에서 쓰기를 차단한다.
+- QR을 재생성하는 후속 기능에서는 기존 접근 키를 즉시 폐기한다.
+
+## 9. Phase 1 실제 REST 처리 구조
+
+```mermaid
+flowchart TD
+    Access["POST /guest/access/verify"] --> AccessToken["10분 투숙객 접근 JWT"]
+    AccessToken --> Create["POST /chat-sessions"]
+    Create --> Waiting["WAITING 세션 + 불투명 guestToken"]
+    Login["POST /auth/agent/login"] --> StaffToken["Agent JWT"]
+    StaffToken --> List["GET /agent/chat-sessions"]
+    List --> Accept["POST /agent/chat-sessions/:id/accept"]
+    Accept --> Active["ACTIVE + agentId + startedAt"]
+    Active --> Close["POST /chat-sessions/:id/close"]
+    Close --> Closed["CLOSED + closedAt + closeReason"]
+```
+
+상담 수락은 `status=WAITING`과 `agentId=null`을 조건으로 한 번에 갱신한다. 두 Agent가 동시에 수락하더라도 한 요청만 성공하도록 데이터베이스 갱신 결과 건수를 확인한다.
+
+## 10. Phase 2 실시간 처리 구조
+
+```mermaid
+sequenceDiagram
+    participant G as 투숙객 Socket
+    participant W as /chat Gateway
+    participant M as MessageService
+    participant D as PostgreSQL
+    participant A as Agent Socket
+
+    G->>W: handshake guestToken + sessionId
+    A->>W: handshake staffToken
+    G->>W: chat:join
+    A->>W: chat:join
+    G->>W: chat:message
+    W->>M: 신원 + 메시지
+    M->>M: UUID·길이·권한·상태·만료 검사
+    M->>D: clientMessageId 고유 제약으로 저장
+    D-->>M: 저장된 메시지
+    M-->>W: 저장 성공
+    W-->>G: chat:message-accepted
+    W-->>A: chat:message
+```
+
+- Socket.IO 연결 미들웨어가 인증을 마쳐야 `connect`가 성공한다.
+- 방 이름은 `session:{sessionId}`이며 권한 검사 후에만 입장한다.
+- 메시지는 DB 저장 성공 후에만 전파한다.
+- 같은 `sessionId + clientMessageId`는 기존 메시지를 반환하고 상대방에게 다시 방송하지 않는다.
+- 재연결 후 `GET /chat-sessions/{id}/messages`로 누락 이력을 복구한다.
+
+## 11. Phase 3 화면 상태와 데이터 흐름
+
+```mermaid
+flowchart LR
+    Link["투숙객 accessKey 링크"] --> Consent["언어 선택·이용 동의"]
+    Consent --> Waiting["WAITING 화면"]
+    Waiting -->|Agent 수락| Active["ACTIVE 채팅"]
+    Active -->|Socket.IO 메시지| Agent["Agent 채팅 화면"]
+    Agent -->|종료 확인| Closed["CLOSED 읽기 전용 화면"]
+    Closed --> History["Agent 종료 상담 기록"]
+```
+
+- 투숙객 토큰과 세션 ID는 탭 단위 `sessionStorage`에 저장해 새로고침 복구와 탭 간 격리를 함께 만족한다.
+- React 개발 모드의 중복 실행과 동시 요청에도 열린 상담이 두 개 생기지 않도록 클라이언트 실행 가드와 데이터베이스 부분 고유 인덱스를 함께 사용한다.
+- Agent 인증도 `sessionStorage`에 두며, 상담 목록은 5초 폴링하고 실제 메시지·상태 변경은 Socket.IO로 즉시 반영한다.
+- 남은 시간은 화면 안내용이며 최종 전송 가능 여부는 서버의 상태와 `expiresAt` 검사가 결정한다.
+
+## 12. 관리자와 운영 안정성
+
+- `/admin/login`과 `/admin/*` API는 ADMIN 역할만 허용하고 Agent 토큰은 거부한다.
+- 관리자 API는 Agent 비밀번호를 bcrypt로 해시하고 응답에서는 해시를 제외한다.
+- 서버는 시작 직후와 5초마다 만료 대상을 DB에서 조회해 `EXPIRED`로 원자 전환하고 Socket.IO 종료 이벤트를 보낸다.
+- REST는 IP·메서드·경로별 분당 제한, WebSocket 메시지는 연결별 분당 60개 제한을 적용한다.
+- 헬스 체크는 프로세스뿐 아니라 PostgreSQL의 `SELECT 1` 결과까지 검사한다.
+- 로그인, 수락, 종료, 만료는 검색 가능한 JSON 구조 로그로 남긴다.

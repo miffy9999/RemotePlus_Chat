@@ -1,0 +1,126 @@
+openapi: 3.1.0
+info:
+  title: Hotel Call Center Chat API
+  version: 0.3.0
+  description: Phase 1 REST API와 Phase 2 Socket.IO 이벤트 계약입니다.
+servers:
+  - url: http://localhost:4000/api
+paths:
+  /health:
+    get:
+      summary: 서버 상태 확인
+      responses:
+        "200": { description: 정상 }
+  /auth/agent/login:
+    post:
+      summary: Agent 로그인
+      requestBody: { $ref: "#/components/requestBodies/Login" }
+      responses:
+        "201": { description: Agent JWT 발급 }
+        "401": { description: 로그인 실패 }
+  /auth/admin/login:
+    post:
+      summary: 관리자 로그인
+      requestBody: { $ref: "#/components/requestBodies/Login" }
+      responses:
+        "201": { description: 관리자 JWT 발급 }
+        "401": { description: 로그인 실패 }
+  /guest/access/verify:
+    post:
+      summary: 룸 접근 키 검증
+      responses:
+        "201": { description: 상담 생성용 단기 JWT와 룸 정보 }
+        "401": { description: 키가 잘못되었거나 만료됨 }
+  /chat-sessions:
+    post:
+      summary: 새 WAITING 상담 생성
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201": { description: 상담과 투숙객 불투명 토큰 }
+        "409": { description: 동일 룸에 진행 가능한 상담 존재 }
+  /chat-sessions/{sessionId}:
+    get:
+      summary: 상담 상세 조회
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200": { description: 상담 상세 }
+        "401": { description: 조회 권한 없음 }
+  /chat-sessions/{sessionId}/messages:
+    get:
+      summary: 저장된 메시지 조회
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200": { description: 생성 시각 순 메시지 목록 }
+  /chat-sessions/{sessionId}/close:
+    post:
+      summary: 담당 Agent 또는 관리자의 상담 종료
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "201": { description: CLOSED 상담 }
+        "403": { description: 담당 상담이 아님 }
+  /agent/chat-sessions:
+    get:
+      summary: 상담 목록 조회
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [WAITING, ACTIVE, CLOSED, EXPIRED, CANCELLED, BLOCKED] }
+      responses:
+        "200": { description: 상담 목록 }
+  /agent/chat-sessions/{sessionId}/accept:
+    post:
+      summary: Agent의 WAITING 상담 수락
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "201": { description: ACTIVE 상담 }
+        "409": { description: 이미 다른 Agent가 수락함 }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    SessionId:
+      name: sessionId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  requestBodies:
+    Login:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [loginId, password]
+            properties:
+              loginId: { type: string }
+              password: { type: string, format: password }
+
+# Socket.IO는 `/chat` 네임스페이스를 사용합니다.
+# 직원은 handshake.auth.staffToken, 투숙객은 guestToken과 sessionId로 연결 인증합니다.
+x-websocket:
+  namespace: /chat
+  authentication:
+    staff: { auth: { staffToken: "Agent JWT" } }
+    guest: { auth: { guestToken: "opaque token", sessionId: "uuid" } }
+  clientEvents:
+    chat:join:
+      payload: { sessionId: "uuid" }
+      result: { ok: true, sessionId: "uuid" }
+    chat:message:
+      payload: { sessionId: "uuid", clientMessageId: "uuid", content: "1..1000 chars" }
+  serverEvents:
+    chat:message-accepted: "DB 저장이 완료된 송신자 승인 메시지"
+    chat:message: "상대방에게 전달되는 저장 완료 메시지"
+    chat:session-updated: "WAITING에서 ACTIVE로 변경된 상담"
+    chat:session-closed: "CLOSED 또는 EXPIRED 상담"
+    chat:error: "내부 정보를 제거한 오류"

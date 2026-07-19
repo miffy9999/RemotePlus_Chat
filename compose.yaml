@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: hotel-chat-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hotel_chat
+      POSTGRES_USER: hotel_chat
+      POSTGRES_PASSWORD: hotel_chat_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - hotel-chat-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hotel_chat -d hotel_chat"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  hotel-chat-postgres-data:

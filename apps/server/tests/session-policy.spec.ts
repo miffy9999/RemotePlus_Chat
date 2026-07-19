@@ -1,0 +1,31 @@
+import { ConflictException, ForbiddenException } from "@nestjs/common";
+import { assertCanAccept, assertCanClose, isSessionExpired } from "../src/modules/chat-sessions/session-policy";
+
+describe("상담 상태 전환 정책", () => {
+  /** WAITING이며 담당자가 없는 상담만 수락할 수 있어야 합니다. */
+  it("대기 상담 수락을 허용한다", () => {
+    expect(() => assertCanAccept("WAITING", null)).not.toThrow();
+  });
+
+  /** 이미 진행 중인 상담의 이중 수락은 메시지 혼선을 만들기 때문에 거절합니다. */
+  it("이미 수락된 상담을 거절한다", () => {
+    expect(() => assertCanAccept("ACTIVE", "agent-id")).toThrow(ConflictException);
+  });
+
+  /** 담당자가 아닌 Agent가 다른 상담을 종료할 수 없어야 합니다. */
+  it("담당자가 아닌 Agent의 종료를 거절한다", () => {
+    expect(() => assertCanClose("ACTIVE", "owner", "other", false)).toThrow(ForbiddenException);
+  });
+
+  /** 관리자는 운영 장애 대응을 위해 진행 중 상담을 종료할 수 있습니다. */
+  it("관리자의 종료를 허용한다", () => {
+    expect(() => assertCanClose("ACTIVE", "owner", "admin", true)).not.toThrow();
+  });
+
+  /** 만료 시각과 현재 시각이 같아도 서버는 추가 요청을 차단해야 합니다. */
+  it("현재 시각에 도달한 상담을 만료로 판단한다", () => {
+    const now = new Date("2026-07-19T08:00:00.000Z");
+    expect(isSessionExpired(now, now)).toBe(true);
+    expect(isSessionExpired(new Date(now.getTime() + 1), now)).toBe(false);
+  });
+});

@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum StaffRole {
+  ADMIN
+  AGENT
+}
+
+enum ChatSessionStatus {
+  WAITING
+  ACTIVE
+  CLOSED
+  EXPIRED
+  CANCELLED
+  BLOCKED
+}
+
+enum SenderType {
+  GUEST
+  AGENT
+  SYSTEM
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  SYSTEM
+  TRANSLATION
+}
+
+model Hotel {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String
+  status    RecordStatus @default(ACTIVE)
+  createdAt DateTime     @default(now())
+  rooms     Room[]
+}
+
+model Room {
+  id          String          @id @default(uuid()) @db.Uuid
+  hotelId     String          @db.Uuid
+  roomNumber  String
+  status      RecordStatus    @default(ACTIVE)
+  createdAt   DateTime        @default(now())
+  hotel       Hotel           @relation(fields: [hotelId], references: [id], onDelete: Restrict)
+  accessKeys  RoomAccessKey[]
+  sessions    ChatSession[]
+  @@unique([hotelId, roomNumber])
+  @@index([hotelId, status])
+}
+
+model RoomAccessKey {
+  id        String       @id @default(uuid()) @db.Uuid
+  roomId    String       @db.Uuid
+  keyHash   String       @unique
+  status    RecordStatus @default(ACTIVE)
+  expiresAt DateTime?
+  createdAt DateTime     @default(now())
+  room      Room         @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  @@index([roomId, status])
+}
+
+model Agent {
+  id           String       @id @default(uuid()) @db.Uuid
+  name         String
+  loginId      String       @unique
+  passwordHash String
+  role         StaffRole    @default(AGENT)
+  status       RecordStatus @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  sessions     ChatSession[]
+}
+
+model ChatSession {
+  id          String            @id @default(uuid()) @db.Uuid
+  roomId      String            @db.Uuid
+  agentId     String?           @db.Uuid
+  status      ChatSessionStatus @default(WAITING)
+  language    String            @default("ko")
+  guestTokenHash String         @unique
+  startedAt   DateTime?
+  expiresAt   DateTime
+  closedAt    DateTime?
+  closeReason String?
+  createdAt   DateTime          @default(now())
+  room        Room              @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  agent       Agent?            @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  messages    Message[]
+  @@index([status, createdAt])
+  @@index([roomId, status])
+}
+
+model Message {
+  id              String      @id @default(uuid()) @db.Uuid
+  sessionId       String      @db.Uuid
+  senderType      SenderType
+  senderId        String?
+  clientMessageId String
+  messageType     MessageType @default(TEXT)
+  content         String
+  createdAt       DateTime    @default(now())
+  session         ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  @@unique([sessionId, clientMessageId])
+  @@index([sessionId, createdAt])
+}
