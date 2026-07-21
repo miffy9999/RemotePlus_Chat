@@ -15,11 +15,16 @@ button:disabled { color: #8992a3; background: #edf0f4; cursor: not-allowed; }
 button.secondary { color: #316bdb; background: #eaf1ff; }
 button.danger { background: #d6564b; }
 button.danger:disabled { color: #8992a3; background: #edf0f4; }
+.language-switcher { display: inline-flex; align-items: center; gap: 8px; color: #687288; font-size: 12px; font-weight: 750; }
+.language-switcher select { padding: 7px 28px 7px 9px; border: 1px solid #d8deea; border-radius: 8px; color: #34405a; background: white; }
+.role-shell > .language-switcher, .login-shell > .language-switcher { position: fixed; top: 20px; right: 24px; z-index: 2; }
+.admin-header-actions { display: flex; align-items: center; gap: 12px; }
 h1, h2, p { margin-top: 0; }
 
 /* 투숙객 화면과 동일한 밝은 배경·흰 카드·파란 포인트를 Agent 전체 화면에 적용합니다. */
 .shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; background: #edf1f7; }
 aside { position: sticky; top: 0; height: 100vh; padding: 30px 22px; display: flex; flex-direction: column; color: #16213a; background: white; border-right: 1px solid #e3e8f1; }
+aside > .language-switcher { margin: -22px 0 22px; }
 .brand { margin-bottom: 36px; font-size: 22px; font-weight: 850; letter-spacing: 1px; }.brand span { color: #316bdb; }.brand.dark { color: #16213a; }
 nav { display: grid; gap: 8px; } nav a { padding: 12px; border-radius: 10px; color: #687288; text-decoration: none; font-weight: 700; } nav a:hover { color: #275bbb; background: #f0f5ff; } aside small { margin-top: auto; color: #8992a3; }
 main { width: 100%; max-width: 1440px; margin: 0 auto; padding: 34px 42px; }
