@@ -9,7 +9,10 @@
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "db:generate": "pnpm --filter @hotel-chat/server prisma:generate",
-    "db:migrate": "pnpm --filter @hotel-chat/server prisma:migrate",
-    "db:seed": "pnpm --filter @hotel-chat/server prisma:seed"
+    "db:migrate": "dotenv -e .env -- pnpm --filter @hotel-chat/server prisma:migrate",
+    "db:seed": "dotenv -e .env -- pnpm --filter @hotel-chat/server prisma:seed"
+  },
+  "devDependencies": {
+    "dotenv-cli": "^11.0.0"
   }
 }

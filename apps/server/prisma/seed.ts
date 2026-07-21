@@ -1,7 +1,13 @@
-import "dotenv/config";
+import { config } from "dotenv";
 import { hash } from "bcrypt";
 import { createHash } from "node:crypto";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { PrismaClient } from "@prisma/client";
+
+// pnpm filter가 작업 폴더를 apps/server로 바꾸더라도 파일 위치를 기준으로 루트 .env를 정확히 읽습니다.
+const currentDirectory = dirname(fileURLToPath(import.meta.url));
+config({ path: resolve(currentDirectory, "../../../.env") });
 
 const prisma = new PrismaClient();
 
