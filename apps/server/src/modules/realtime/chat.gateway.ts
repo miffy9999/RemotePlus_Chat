@@ -1,6 +1,6 @@
 import { HttpException, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import { ConnectedSocket, MessageBody, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from "@nestjs/websockets";
+import { ConnectedSocket, MessageBody, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
 import { CHAT_EVENTS } from "@hotel-chat/shared";
 import { AuthService } from "../auth/auth.service";
@@ -8,6 +8,7 @@ import { ChatSessionsService } from "../chat-sessions/chat-sessions.service";
 import { MessagesService } from "../messages/messages.service";
 import type { RealtimeErrorView, RealtimeIdentity } from "./realtime.types";
 import { allowedWebOrigins } from "../../common/config/environment";
+import { FixedWindowRateLimiter } from "../../common/security/fixed-window-rate-limiter";
 
 /** Socket.IO 네임스페이스에서 인증, 방 입장과 실시간 이벤트 전달을 담당합니다. */
 @WebSocketGateway({
@@ -15,12 +16,12 @@ import { allowedWebOrigins } from "../../common/config/environment";
   // REST와 동일하게 두 로컬 호스트 표기를 허용해 브라우저별 주소 차이로 연결이 막히지 않게 합니다.
   cors: { origin: allowedWebOrigins(), credentials: true },
 })
-export class ChatGateway implements OnGatewayInit {
+export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
   @WebSocketServer()
   private server!: Server;
 
   private readonly logger = new Logger(ChatGateway.name);
-  private readonly messageRates = new Map<string, { count: number; resetAt: number }>();
+  private readonly messageRates = new FixedWindowRateLimiter();
 
   constructor(private readonly auth: AuthService, private readonly sessions: ChatSessionsService, private readonly messages: MessagesService) {}
 
@@ -54,6 +55,14 @@ export class ChatGateway implements OnGatewayInit {
     });
   }
 
+  /**
+   * 연결이 끝난 소켓의 메시지 제한 기록을 즉시 제거합니다.
+   * 공개 고객 링크는 소켓 연결 수가 계속 누적될 수 있으므로 이 정리가 없으면 종료된 연결 수만큼 서버 메모리가 증가합니다.
+   */
+  handleDisconnect(socket: Socket): void {
+    this.messageRates.forget(socket.id);
+  }
+
   /** 상담별 Socket.IO 방에 입장하기 전에 현재 담당자와 세션 ID를 다시 검사합니다. */
   @SubscribeMessage(CHAT_EVENTS.join)
   async join(@ConnectedSocket() socket: Socket, @MessageBody() payload: { sessionId?: string }) {
@@ -73,9 +82,7 @@ export class ChatGateway implements OnGatewayInit {
   async message(@ConnectedSocket() socket: Socket, @MessageBody() payload: unknown) {
     try {
       // 연결별 분당 60개를 넘는 메시지는 저장 전에 차단해 반복 전송으로부터 DB와 상대방을 보호한다.
-      const now = Date.now(); const rate = this.messageRates.get(socket.id);
-      if (!rate || rate.resetAt <= now) this.messageRates.set(socket.id, { count: 1, resetAt: now + 60_000 });
-      else if (++rate.count > 60) throw new HttpException("메시지를 너무 빠르게 보내고 있습니다.", 429);
+      if (!this.messageRates.allow(socket.id, 60)) throw new HttpException("메시지를 너무 빠르게 보내고 있습니다.", 429);
       const saved = await this.messages.save(this.identity(socket), payload);
       const view = { ...saved.message, createdAt: saved.message.createdAt.toISOString(), duplicate: saved.duplicate };
       socket.emit(CHAT_EVENTS.accepted, view);

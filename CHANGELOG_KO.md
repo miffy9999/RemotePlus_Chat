@@ -1,5 +1,32 @@
 # 프로젝트 변경 이력
 
+## 2026-07-21 16:29:29 +09:00
+
+### 수정한 파일
+
+- REST 요청 제한기: `apps/server/src/main.ts`
+- WebSocket 게이트웨이: `apps/server/src/modules/realtime/chat.gateway.ts`
+- 공통 요청 제한기: `apps/server/src/common/security/fixed-window-rate-limiter.ts`
+- 요청 제한기 회귀 테스트: `apps/server/tests/fixed-window-rate-limiter.spec.ts`
+- 기능 현황: `docs/12_Feature_Status.md`
+
+### 수정 내용
+
+- 만료된 REST 요청 제한 기록을 1분 간격으로 정리하도록 보완했습니다.
+- Socket.IO 연결이 종료되면 해당 연결의 메시지 제한 기록을 즉시 제거하도록 보완했습니다.
+- 다른 활성 소켓의 기록은 유지하면서 종료된 소켓 기록만 제거하는 회귀 테스트를 추가했습니다.
+
+### 수정 이유
+
+공개 고객 링크의 접속과 동적 상담 API 호출이 누적될 때 이미 끝난 요청 제한 기록이 메모리에 계속 남아, 장기 운용 서버의 메모리 사용량이 불필요하게 증가하는 문제를 방지하기 위해 수정했습니다.
+
+### 확인 방법
+
+- `pnpm test`: 서버 17개, Agent 웹 3개, Guest 웹 3개 테스트가 모두 통과했습니다.
+- `pnpm lint`: 공유 패키지와 서버·Agent 웹·Guest 웹 타입 검사가 모두 통과했습니다.
+- `pnpm build`: 서버와 두 웹 앱의 프로덕션 빌드가 모두 통과했습니다.
+- `git diff --check`로 공백 오류를 추가 확인합니다.
+
 ## 2026-07-21 15:42:30 +09:00
 
 ### 수정한 파일

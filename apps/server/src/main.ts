@@ -6,15 +6,16 @@ import helmet from "helmet";
 import { AppModule } from "./app.module";
 import type { NextFunction, Request, Response } from "express";
 import { allowedWebOrigins, serverPort, validateRuntimeEnvironment } from "./common/config/environment";
+import { FixedWindowRateLimiter } from "./common/security/fixed-window-rate-limiter";
 
 /** 단일 서버 MVP용 메모리 요청 제한기다. 운영 다중 서버에서는 Redis 저장소로 교체해야 한다. */
-const rateBuckets = new Map<string, { count: number; resetAt: number }>();
+const restRateLimiter = new FixedWindowRateLimiter();
+
 function rateLimit(request: Request, response: Response, next: NextFunction): void {
   const sensitive = /\/(login|verify|chat-sessions)/.test(request.path);
   const limit = sensitive ? 30 : 120;
-  const key = `${request.ip}:${request.method}:${request.path}`; const now = Date.now(); const bucket = rateBuckets.get(key);
-  if (!bucket || bucket.resetAt <= now) rateBuckets.set(key, { count: 1, resetAt: now + 60_000 });
-  else if (++bucket.count > limit) { response.status(429).json({ statusCode: 429, message: "요청이 너무 많습니다. 잠시 후 다시 시도하세요." }); return; }
+  const key = `${request.ip}:${request.method}:${request.path}`;
+  if (!restRateLimiter.allow(key, limit)) { response.status(429).json({ statusCode: 429, message: "요청이 너무 많습니다. 잠시 후 다시 시도하세요." }); return; }
   next();
 }
 
