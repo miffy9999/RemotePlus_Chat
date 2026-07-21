@@ -1,5 +1,37 @@
 # 프로젝트 변경 이력
 
+## 2026-07-21 14:43:48 +09:00
+
+### 수정한 파일
+
+- 배포 설정: `render.yaml`, `apps/agent-web/vercel.json`, `apps/guest-web/vercel.json`
+- 서버 환경 및 실행: `apps/server/src/common/config/environment.ts`, `apps/server/src/main.ts`, `apps/server/src/modules/realtime/chat.gateway.ts`, `apps/server/package.json`
+- 서버 환경 테스트: `apps/server/tests/environment.spec.ts`
+- 운영 시드 보호: `apps/server/prisma/seed.ts`
+- 로그인 기본값 제거: `apps/agent-web/src/main.tsx`
+- 환경 예시 및 런타임 범위: `.env.example`, `package.json`
+- 배포 문서: `docs/12_Free_Deployment_Guide.md`, `README.md`
+
+### 수정 내용
+
+- Render 무료 Blueprint에서 싱가포르 리전의 API와 30일 테스트용 PostgreSQL을 함께 만들도록 구성했다.
+- 무료 서비스에서도 Prisma 마이그레이션이 실행되도록 시작 명령에 `prisma migrate deploy`를 포함하고, 최초 배포 훅에서 시드를 한 번 실행하도록 구성했다.
+- Render가 제공하는 `PORT`와 `0.0.0.0` 바인딩을 지원하고 REST 및 Socket.IO가 공통 `WEB_ORIGINS` 목록을 사용하도록 변경했다.
+- Nest 빌드 산출물의 실제 경로인 `dist/src/main.js`를 운영 시작 명령으로 사용하도록 구성했다.
+- 운영 환경에서 DB, JWT, CORS 또는 안전한 시드 비밀값이 없으면 배포가 조기에 실패하도록 검증을 추가했다.
+- Vercel의 두 Vite 프로젝트가 모노레포 공통 패키지를 빌드하고 SPA 경로를 `index.html`로 되돌리도록 설정했다.
+- 공개 빌드에 테스트 비밀번호가 기본 입력값으로 포함되지 않도록 Agent와 관리자 비밀번호 필드를 비웠다.
+
+### 수정 이유
+
+하나의 GitHub 모노레포를 유지하면서 Vercel Hobby와 Render 무료 플랜으로 REST·WebSocket·PostgreSQL을 함께 검증하고, 테스트용 기본 비밀값이 공개 배포로 유출되는 위험을 줄이기 위해 수정했다.
+
+### 확인 방법
+
+- `pnpm lint`, `pnpm test`, `pnpm build`로 전체 TypeScript, 단위 테스트, 운영 빌드를 확인한다.
+- `NODE_ENV=production` 환경 검증과 Render 시작 명령의 Prisma 배포 마이그레이션을 확인한다.
+- 두 Vercel 앱의 빌드 결과와 SPA rewrite 설정을 확인한다.
+
 모든 시각은 Asia/Tokyo(UTC+09:00)를 기준으로 기록한다. 최신 변경을 위에 추가한다.
 
 ## 2026-07-21 12:12:26 +09:00

@@ -21,7 +21,7 @@ function RoleSelection(): React.JSX.Element {
 /** 실제 Agent API를 호출하는 로그인 화면입니다. */
 function LoginPage({ onLogin }: { onLogin: (auth: AgentAuth) => void }): React.JSX.Element {
   const [loginId, setLoginId] = useState("agent01");
-  const [password, setPassword] = useState("Agent1234!");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -110,7 +110,7 @@ function playNotificationSound(): void { try { const context = new AudioContext(
 
 /** 기존 관리자 화면은 Phase 3A 전까지 QR 비활성 원칙을 보여주는 정적 화면으로 유지합니다. */
 /** 관리자 전용 로그인은 Agent 토큰과 다른 저장 키를 사용해 역할 화면이 섞이지 않게 합니다. */
-function AdminLogin({ onLogin }: { onLogin: (auth: AgentAuth) => void }): React.JSX.Element { const [loginId,setLoginId]=useState("admin"); const [password,setPassword]=useState("Admin1234!"); const [error,setError]=useState(""); async function submit(e:FormEvent){e.preventDefault();try{const value=await loginAdmin(loginId,password);sessionStorage.setItem("hotel-chat-admin-auth",JSON.stringify(value));onLogin(value);}catch(reason){setError(reason instanceof Error?reason.message:"로그인에 실패했습니다.");}} return <div className="login-shell"><form className="login-card" onSubmit={submit}><div className="brand dark">REMOTE<span>+</span></div><h1>관리자 로그인</h1><label>로그인 ID<input value={loginId} onChange={e=>setLoginId(e.target.value)}/></label><label>비밀번호<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label>{error&&<div className="error-box">{error}</div>}<button>로그인</button></form></div>; }
+function AdminLogin({ onLogin }: { onLogin: (auth: AgentAuth) => void }): React.JSX.Element { const [loginId,setLoginId]=useState("admin"); const [password,setPassword]=useState(""); const [error,setError]=useState(""); async function submit(e:FormEvent){e.preventDefault();try{const value=await loginAdmin(loginId,password);sessionStorage.setItem("hotel-chat-admin-auth",JSON.stringify(value));onLogin(value);}catch(reason){setError(reason instanceof Error?reason.message:"로그인에 실패했습니다.");}} return <div className="login-shell"><form className="login-card" onSubmit={submit}><div className="brand dark">REMOTE<span>+</span></div><h1>관리자 로그인</h1><label>로그인 ID<input value={loginId} onChange={e=>setLoginId(e.target.value)}/></label><label>비밀번호<input type="password" value={password} onChange={e=>setPassword(e.target.value)}/></label>{error&&<div className="error-box">{error}</div>}<button>로그인</button></form></div>; }
 
 /** 관리자만 받은 투숙객 주소를 클립보드에 복사합니다. 실패하면 호출부가 화면 오류로 안내합니다. */
 async function copyGuestUrl(url: string): Promise<void> { await navigator.clipboard.writeText(url); }

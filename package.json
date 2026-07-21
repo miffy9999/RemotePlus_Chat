@@ -2,14 +2,18 @@
   "name": "hotel-callcenter-chat",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22 <25"
+  },
   "packageManager": "pnpm@10.12.1",
   "scripts": {
-    "predev": "pnpm --filter @hotel-chat/shared build",
+    "predev": "pnpm --filter @hotel-chat/shared build && pnpm db:generate",
     "dev": "pnpm --parallel --filter './apps/*' dev",
+    "prebuild": "pnpm db:generate",
     "build": "pnpm -r build",
-    "pretest": "pnpm --filter @hotel-chat/shared build",
+    "pretest": "pnpm --filter @hotel-chat/shared build && pnpm db:generate",
     "test": "pnpm -r test",
-    "prelint": "pnpm --filter @hotel-chat/shared build",
+    "prelint": "pnpm --filter @hotel-chat/shared build && pnpm db:generate",
     "lint": "pnpm -r lint",
     "db:generate": "pnpm --filter @hotel-chat/server prisma:generate",
     "db:migrate": "dotenv -e .env -- pnpm --filter @hotel-chat/server prisma:migrate",

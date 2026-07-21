@@ -12,6 +12,15 @@ config({ path: resolve(currentDirectory, "../../../.env") });
 
 const prisma = new PrismaClient();
 
+/** 운영 시드는 예시 비밀번호나 접속 키를 허용하지 않고 Render에 입력한 값만 사용합니다. */
+function seedSecret(name: string, fallback: string): string {
+  const value = process.env[name]?.trim();
+  if (process.env.NODE_ENV === "production" && (!value || value === fallback || value.length < 12)) {
+    throw new Error(`${name}에 12자 이상의 운영용 임의 값을 설정해야 합니다.`);
+  }
+  return value || fallback;
+}
+
 /** 개발용 접근 키도 운영 코드와 같은 SHA-256 규칙으로 저장합니다. */
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -26,16 +35,16 @@ async function seed(): Promise<void> {
   const seedHotelId = "11111111-1111-4111-8111-111111111111";
   const hotel = await prisma.hotel.upsert({ where: { id: seedHotelId }, update: {}, create: { id: seedHotelId, name: "도쿄 센트럴 호텔" } });
   const room = await prisma.room.upsert({ where: { hotelId_roomNumber: { hotelId: hotel.id, roomNumber: "1201" } }, update: {}, create: { hotelId: hotel.id, roomNumber: "1201" } });
-  const accessKey = process.env.SEED_ROOM_ACCESS_KEY ?? "demo-room-access-1201";
+  const accessKey = seedSecret("SEED_ROOM_ACCESS_KEY", "demo-room-access-1201");
   await prisma.roomAccessKey.upsert({ where: { keyHash: sha256(accessKey) }, update: { status: "ACTIVE", encryptedKey: encryptSecret(accessKey) }, create: { roomId: room.id, keyHash: sha256(accessKey), encryptedKey: encryptSecret(accessKey) } });
 
   // 두 상담방의 메시지가 섞이지 않는지 통합 테스트하기 위한 두 번째 개발용 객실입니다.
   const secondRoom = await prisma.room.upsert({ where: { hotelId_roomNumber: { hotelId: hotel.id, roomNumber: "1202" } }, update: {}, create: { hotelId: hotel.id, roomNumber: "1202" } });
-  const secondAccessKey = process.env.SEED_SECOND_ROOM_ACCESS_KEY ?? "demo-room-access-1202";
+  const secondAccessKey = seedSecret("SEED_SECOND_ROOM_ACCESS_KEY", "demo-room-access-1202");
   await prisma.roomAccessKey.upsert({ where: { keyHash: sha256(secondAccessKey) }, update: { status: "ACTIVE", encryptedKey: encryptSecret(secondAccessKey) }, create: { roomId: secondRoom.id, keyHash: sha256(secondAccessKey), encryptedKey: encryptSecret(secondAccessKey) } });
 
-  const adminPassword = await hash(process.env.SEED_ADMIN_PASSWORD ?? "Admin1234!", 12);
-  const agentPassword = await hash(process.env.SEED_AGENT_PASSWORD ?? "Agent1234!", 12);
+  const adminPassword = await hash(seedSecret("SEED_ADMIN_PASSWORD", "Admin1234!"), 12);
+  const agentPassword = await hash(seedSecret("SEED_AGENT_PASSWORD", "Agent1234!"), 12);
   await prisma.agent.upsert({ where: { loginId: "admin" }, update: {}, create: { name: "시스템 관리자", loginId: "admin", passwordHash: adminPassword, role: "ADMIN" } });
   await prisma.agent.upsert({ where: { loginId: "agent01" }, update: {}, create: { name: "김상담", loginId: "agent01", passwordHash: agentPassword, role: "AGENT" } });
 }

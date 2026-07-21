@@ -7,12 +7,13 @@ import { AuthService } from "../auth/auth.service";
 import { ChatSessionsService } from "../chat-sessions/chat-sessions.service";
 import { MessagesService } from "../messages/messages.service";
 import type { RealtimeErrorView, RealtimeIdentity } from "./realtime.types";
+import { allowedWebOrigins } from "../../common/config/environment";
 
 /** Socket.IO 네임스페이스에서 인증, 방 입장과 실시간 이벤트 전달을 담당합니다. */
 @WebSocketGateway({
   namespace: "/chat",
   // REST와 동일하게 두 로컬 호스트 표기를 허용해 브라우저별 주소 차이로 연결이 막히지 않게 합니다.
-  cors: { origin: [process.env.AGENT_WEB_ORIGIN ?? "http://localhost:5173", process.env.GUEST_WEB_ORIGIN ?? "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"], credentials: true },
+  cors: { origin: allowedWebOrigins(), credentials: true },
 })
 export class ChatGateway implements OnGatewayInit {
   @WebSocketServer()

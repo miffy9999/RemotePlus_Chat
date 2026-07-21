@@ -5,6 +5,7 @@ import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
 import type { NextFunction, Request, Response } from "express";
+import { allowedWebOrigins, serverPort, validateRuntimeEnvironment } from "./common/config/environment";
 
 /** 단일 서버 MVP용 메모리 요청 제한기다. 운영 다중 서버에서는 Redis 저장소로 교체해야 한다. */
 const rateBuckets = new Map<string, { count: number; resetAt: number }>();
@@ -22,6 +23,8 @@ function rateLimit(request: Request, response: Response, next: NextFunction): vo
  * 전역 검증 파이프는 DTO에 선언되지 않은 필드를 제거하고 잘못된 입력을 API 진입점에서 차단합니다.
  */
 async function bootstrap(): Promise<void> {
+  validateRuntimeEnvironment();
+  const port = serverPort();
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix("api");
   app.use(helmet());
@@ -29,12 +32,12 @@ async function bootstrap(): Promise<void> {
   app.use(rateLimit);
   app.enableCors({
     // 개발 확인 링크가 localhost와 127.0.0.1 중 어느 주소를 사용해도 같은 로컬 앱으로 인식합니다.
-    origin: [process.env.AGENT_WEB_ORIGIN ?? "http://localhost:5173", process.env.GUEST_WEB_ORIGIN ?? "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174"],
+    origin: allowedWebOrigins(),
     credentials: true,
   });
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
-  await app.listen(Number(process.env.SERVER_PORT ?? 4000));
-  new Logger("Bootstrap").log(JSON.stringify({ event: "server.started", port: Number(process.env.SERVER_PORT ?? 4000) }));
+  await app.listen(port, "0.0.0.0");
+  new Logger("Bootstrap").log(JSON.stringify({ event: "server.started", port }));
 }
 
 void bootstrap();

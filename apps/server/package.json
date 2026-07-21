@@ -5,12 +5,14 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
+    "start:prod": "node dist/src/main.js",
     "test": "jest --runInBand",
     "test:phase2": "tsx ../../tests/integration/verify-phase2.ts",
     "test:phase45": "tsx ../../tests/integration/verify-phase45.ts",
     "lint": "tsc -p tsconfig.json --noEmit",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
     "prisma:seed": "tsx prisma/seed.ts"
   },
   "dependencies": {

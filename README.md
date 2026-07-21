@@ -1,5 +1,7 @@
 # Hotel Call Center Chat
 
+Vercel + Render 무료 테스트 배포 절차는 [`docs/12_Free_Deployment_Guide.md`](docs/12_Free_Deployment_Guide.md)를 참고하세요.
+
 호텔 객실의 고객과 콜센터 상담원을 연결하는 실시간 채팅 MVP입니다. 관리자 웹, Agent 웹, 고객 웹, NestJS/Socket.IO 서버, PostgreSQL을 포함합니다.
 
 ## Docker로 가장 빠르게 실행하기
