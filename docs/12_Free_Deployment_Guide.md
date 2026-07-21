@@ -12,7 +12,7 @@
 ## 1. Render Blueprint 생성
 
 1. Render Dashboard에서 **New > Blueprint**를 선택합니다.
-2. GitHub 저장소 `meisteroad923-dev/chat_app`를 연결합니다.
+2. GitHub 저장소 `miffy9999/RemotePlus_Chat`을 연결합니다.
 3. Blueprint 파일은 저장소 루트의 `render.yaml`을 선택합니다.
 4. 무료 리소스 `remoteplus-api`, `remoteplus-db`가 생성되는지 확인합니다.
 5. 입력을 요구하는 환경변수에는 다음 값을 설정합니다.

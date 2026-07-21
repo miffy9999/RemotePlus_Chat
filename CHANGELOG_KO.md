@@ -1,5 +1,28 @@
 # 프로젝트 변경 이력
 
+## 2026-07-21 15:42:30 +09:00
+
+### 수정한 파일
+
+- 라이선스: `LICENSE`
+- 무료 배포 문서: `docs/12_Free_Deployment_Guide.md`
+- 변경 이력: `CHANGELOG_KO.md`
+
+### 수정 내용
+
+- 공식 GitHub 원본 저장소를 `miffy9999/RemotePlus_Chat`으로 변경했습니다.
+- 새 저장소의 MIT 라이선스를 프로젝트에 포함했습니다.
+- Vercel 운영 도메인을 Agent `remoteplus-agent.vercel.app`, Guest `remoteplus-guest.vercel.app` 기준으로 연결합니다.
+
+### 수정 이유
+
+저장소 소유권 때문에 제한되던 Vercel Git 연동을 사용자 소유 저장소로 전환하고 `main` 푸시 자동 배포를 사용하기 위해 수정했습니다.
+
+### 확인 방법
+
+- 새 저장소에 전체 Git 기록이 존재하는지 확인합니다.
+- 새 저장소 `main` 푸시 후 Vercel 두 프로젝트와 Render API의 자동 배포 상태를 확인합니다.
+
 ## 2026-07-21 15:23:50 +09:00
 
 ### 수정한 파일
