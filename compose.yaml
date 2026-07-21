@@ -1,7 +1,8 @@
+name: hotel-chat
+
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: hotel-chat-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: hotel_chat
@@ -10,12 +11,85 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - hotel-chat-postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hotel_chat -d hotel_chat"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
+
+  migrate:
+    # 마이그레이션은 서버와 코드·의존성이 같으므로 별도 1.24GB 이미지를 만들지 않고 서버 이미지를 재사용한다.
+    image: hotel-chat-server:latest
+    environment: &server-environment
+      DATABASE_URL: postgresql://hotel_chat:hotel_chat_dev@postgres:5432/hotel_chat?schema=public
+      JWT_SECRET: ${JWT_SECRET:-local-docker-jwt-secret-change-before-production}
+      ACCESS_KEY_ENCRYPTION_SECRET: ${ACCESS_KEY_ENCRYPTION_SECRET:-local-docker-access-key-secret-change-before-production}
+      JWT_EXPIRES_IN: 15m
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin1234!}
+      SEED_AGENT_PASSWORD: ${SEED_AGENT_PASSWORD:-Agent1234!}
+      SEED_ROOM_ACCESS_KEY: ${SEED_ROOM_ACCESS_KEY:-demo-room-access-1201}
+      SEED_SECOND_ROOM_ACCESS_KEY: ${SEED_SECOND_ROOM_ACCESS_KEY:-demo-room-access-1202}
+      GUEST_PUBLIC_URL: ${GUEST_PUBLIC_URL:-http://localhost:5174}
+      AGENT_WEB_ORIGIN: ${AGENT_WEB_ORIGIN:-http://localhost:5173}
+      GUEST_WEB_ORIGIN: ${GUEST_WEB_ORIGIN:-http://localhost:5174}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["sh", "-c", "pnpm --filter @hotel-chat/server exec prisma migrate deploy --schema prisma/schema.prisma && pnpm --filter @hotel-chat/server prisma:seed"]
+    restart: "no"
+
+  server:
+    image: hotel-chat-server:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    restart: unless-stopped
+    environment:
+      <<: *server-environment
+      SERVER_PORT: 4000
+    ports:
+      # Windows가 4000번을 예약하는 환경에서도 실행되도록 호스트는 기본 4100번을 사용한다.
+      - "${API_PORT:-4100}:4000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  agent-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        APP_PATH: apps/agent-web
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:4100/api}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:4100/chat}
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      server:
+        condition: service_healthy
+
+  guest-web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        APP_PATH: apps/guest-web
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:4100/api}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-http://localhost:4100/chat}
+    restart: unless-stopped
+    ports:
+      - "5174:80"
+    depends_on:
+      server:
+        condition: service_healthy
 
 volumes:
-  hotel-chat-postgres-data:
+  postgres-data:
+    name: hotel-chat-postgres-data

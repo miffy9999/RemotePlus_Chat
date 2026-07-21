@@ -4,6 +4,22 @@
 
 이 문서는 프로그램을 처음 보는 사람이 각 화면, 서버 모듈, 데이터베이스와 실시간 이벤트가 어떻게 연결되는지 한눈에 이해하도록 돕는다. 상세 구현이 바뀌면 이 설계도도 함께 갱신한다.
 
+## Docker 실행 구조와 룸 주소 생성
+
+```mermaid
+flowchart LR
+    Browser["브라우저"] --> AgentWeb["agent-web :5173"]
+    Browser --> GuestWeb["guest-web :5174"]
+    AgentWeb --> Server["NestJS + Socket.IO :4000"]
+    GuestWeb --> Server
+    Server --> Postgres["PostgreSQL :5432"]
+    Migrate["일회성 migrate 컨테이너"] --> Postgres
+```
+
+`docker compose up -d --build`는 웹 2개, API 서버, PostgreSQL을 같은 Docker 네트워크에 구성한다. `migrate` 컨테이너가 마이그레이션과 시드를 성공한 뒤 서버가 시작되므로 새 PC에서도 같은 순서로 초기화된다.
+
+관리자가 룸을 추가하면 서버는 추측하기 어려운 접근키를 생성한다. 검증용 SHA-256 해시와 관리자 화면 복원용 AES-256-GCM 암호문만 DB에 저장한다. 관리자 API는 ADMIN 권한을 확인한 뒤 암호문을 복호화하여 `GUEST_PUBLIC_URL/?accessKey=...` 형식의 고객 주소를 돌려준다. 고객 접속 시에는 전달된 키의 해시로 룸을 검증한다.
+
 ## 2. 전체 구조
 
 ```mermaid

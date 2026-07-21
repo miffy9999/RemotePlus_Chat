@@ -62,12 +62,18 @@ export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? "http://127.0.0.1:4
 
 export interface AdminAgentView { id: string; name: string; loginId: string; role: "AGENT"; status: "ACTIVE" | "INACTIVE"; createdAt: string }
 export interface HotelView { id: string; name: string; status: "ACTIVE" | "INACTIVE"; createdAt: string }
-export interface RoomView { id: string; hotelId: string; roomNumber: string; status: "ACTIVE" | "INACTIVE"; createdAt: string; hotel: HotelView }
+export interface RoomView { id: string; hotelId: string; roomNumber: string; status: "ACTIVE" | "INACTIVE"; createdAt: string; hotel: HotelView; guestUrl: string | null }
 /** 관리자 로그인과 관리 API는 ADMIN 역할 JWT를 요구해 Agent 상담 권한과 분리합니다. */
 export function loginAdmin(loginId: string, password: string) { return request<{ accessToken: string; agent: { id: string; name: string; role: "ADMIN" } }>("/auth/admin/login", { method: "POST", body: JSON.stringify({ loginId, password }) }); }
 export function listAdminAgents(token: string) { return request<AdminAgentView[]>("/admin/agents", { headers: { authorization: `Bearer ${token}` } }); }
 export function createAdminAgent(token: string, input: { name: string; loginId: string; password: string }) { return request<AdminAgentView>("/admin/agents", { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ ...input, role: "AGENT" }) }); }
+/** 관리자 확인을 거친 Agent 계정을 삭제하며 기존 상담 기록은 서버가 보존합니다. */
+export function deleteAdminAgent(token: string, id: string) { return request<{ deletedId: string }>(`/admin/agents/${id}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } }); }
 export function listHotels(token: string) { return request<HotelView[]>("/admin/hotels", { headers: { authorization: `Bearer ${token}` } }); }
 export function createHotel(token: string, name: string) { return request<HotelView>("/admin/hotels", { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ name }) }); }
+/** 호텔과 모든 하위 룸·상담 데이터의 연쇄 삭제를 서버에 요청합니다. */
+export function deleteHotel(token: string, id: string) { return request<{ deletedId: string }>(`/admin/hotels/${id}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } }); }
 export function listRooms(token: string, hotelId?: string) { return request<RoomView[]>(`/admin/rooms${hotelId ? `?hotelId=${encodeURIComponent(hotelId)}` : ""}`, { headers: { authorization: `Bearer ${token}` } }); }
 export function createRoom(token: string, hotelId: string, roomNumber: string) { return request<RoomView>("/admin/rooms", { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ hotelId, roomNumber }) }); }
+/** 룸과 연결된 접근키·상담·메시지를 함께 삭제하도록 서버에 요청합니다. */
+export function deleteRoom(token: string, id: string) { return request<{ deletedId: string }>(`/admin/rooms/${id}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } }); }
