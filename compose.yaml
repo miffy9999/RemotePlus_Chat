@@ -25,7 +25,6 @@ services:
       DATABASE_URL: postgresql://hotel_chat:hotel_chat_dev@postgres:5432/hotel_chat?schema=public
       JWT_SECRET: ${JWT_SECRET:-local-docker-jwt-secret-change-before-production}
       ACCESS_KEY_ENCRYPTION_SECRET: ${ACCESS_KEY_ENCRYPTION_SECRET:-local-docker-access-key-secret-change-before-production}
-      JWT_EXPIRES_IN: 15m
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-Admin1234!}
       SEED_AGENT_PASSWORD: ${SEED_AGENT_PASSWORD:-Agent1234!}
       SEED_ROOM_ACCESS_KEY: ${SEED_ROOM_ACCESS_KEY:-demo-room-access-1201}

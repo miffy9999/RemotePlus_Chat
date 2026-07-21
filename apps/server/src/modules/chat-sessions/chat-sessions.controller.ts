@@ -19,20 +19,20 @@ export class ChatSessionsController {
 
   /** 직원 Bearer 토큰 또는 투숙객 `x-guest-token` 중 하나로 상담을 조회합니다. */
   @Get(":sessionId")
-  get(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request, @Headers("x-guest-token") guestToken?: string) {
-    return this.sessions.get(id, optionalStaff(request, this.auth), guestToken);
+  async get(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request, @Headers("x-guest-token") guestToken?: string) {
+    return this.sessions.get(id, await optionalStaff(request, this.auth), guestToken);
   }
 
   /** 재연결 시 저장된 메시지를 시간 순으로 복구합니다. */
   @Get(":sessionId/messages")
-  messages(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request, @Headers("x-guest-token") guestToken?: string) {
-    return this.sessions.messages(id, optionalStaff(request, this.auth), guestToken);
+  async messages(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request, @Headers("x-guest-token") guestToken?: string) {
+    return this.sessions.messages(id, await optionalStaff(request, this.auth), guestToken);
   }
 
   /** 담당 Agent 또는 관리자만 상담을 수동 종료할 수 있습니다. */
   @Post(":sessionId/close")
-  close(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request) {
-    return this.sessions.close(id, requireStaff(request, this.auth, ["AGENT", "ADMIN"]));
+  async close(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request) {
+    return this.sessions.close(id, await requireStaff(request, this.auth, ["AGENT", "ADMIN"]));
   }
 }
 
@@ -43,14 +43,14 @@ export class AgentChatSessionsController {
 
   /** 대기·진행·종료 상태를 선택적으로 필터링해 조회합니다. */
   @Get()
-  list(@Req() request: Request, @Query() query: ListSessionsDto) {
-    requireStaff(request, this.auth, ["AGENT", "ADMIN"]);
+  async list(@Req() request: Request, @Query() query: ListSessionsDto) {
+    await requireStaff(request, this.auth, ["AGENT", "ADMIN"]);
     return this.sessions.list(query.status);
   }
 
   /** WAITING 상담을 현재 Agent에게 원자적으로 배정하고 ACTIVE로 전환합니다. */
   @Post(":sessionId/accept")
-  accept(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request) {
-    return this.sessions.accept(id, requireStaff(request, this.auth, ["AGENT"]));
+  async accept(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request) {
+    return this.sessions.accept(id, await requireStaff(request, this.auth, ["AGENT"]));
   }
 }

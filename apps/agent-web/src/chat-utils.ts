@@ -7,3 +7,8 @@ export function remainingTime(expiresAt: string, now: number): string {
   const seconds = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now) / 1000));
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
+
+/** 새 메시지 또는 종료 상태가 반영된 뒤 전체 문서가 아닌 채팅 컨테이너만 마지막 위치로 이동합니다. */
+export function scrollChatToLatest(container: Pick<HTMLElement, "scrollHeight" | "scrollTo">, smooth: boolean): void {
+  container.scrollTo({ top: container.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+}

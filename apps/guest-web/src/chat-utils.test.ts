@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { mergeMessage, remainingTime } from "./chat-utils";
+import { describe, expect, it, vi } from "vitest";
+import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
 
 describe("투숙객 채팅 화면 유틸리티", () => {
   /** REST 이력과 Socket 이벤트가 겹쳐도 메시지는 한 번만 보여야 합니다. */
@@ -18,5 +18,11 @@ describe("투숙객 채팅 화면 유틸리티", () => {
     const now = Date.parse("2026-07-21T00:00:00.000Z");
     expect(remainingTime("2026-07-21T00:15:00.000Z", now)).toBe("15:00");
     expect(remainingTime("2026-07-20T23:59:00.000Z", now)).toBe("00:00");
+  });
+  /** 게스트 새 메시지는 전체 페이지가 아닌 메시지 목록 내부에서만 자동 스크롤합니다. */
+  it("게스트 채팅 목록을 마지막 말풍선으로 이동한다", () => {
+    const scrollTo = vi.fn();
+    scrollChatToLatest({ scrollHeight: 960, scrollTo }, false);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 960, behavior: "auto" });
   });
 });

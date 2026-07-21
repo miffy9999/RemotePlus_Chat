@@ -34,8 +34,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
       try {
         const { staffToken, guestToken, sessionId } = socket.handshake.auth as Record<string, unknown>;
         if (typeof staffToken === "string") {
-          const identity = this.auth.verifyToken(staffToken);
-          if (identity.kind !== "staff") throw new Error("직원 토큰이 아닙니다.");
+          const identity = await this.auth.verifyActiveStaff(staffToken);
           socket.data.identity = { kind: "staff", staff: identity } satisfies RealtimeIdentity;
           next();
           return;

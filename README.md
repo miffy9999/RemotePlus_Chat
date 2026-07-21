@@ -2,6 +2,8 @@
 
 Vercel + Render 무료 테스트 배포 절차는 [`docs/12_Free_Deployment_Guide.md`](docs/12_Free_Deployment_Guide.md)를 참고하세요.
 
+상업 출시 전 점검 항목은 [`docs/13_Commercial_Release_Checklist_KO.md`](docs/13_Commercial_Release_Checklist_KO.md), 오픈소스 고지는 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)를 참고하세요.
+
 호텔 객실의 고객과 콜센터 상담원을 연결하는 실시간 채팅 MVP입니다. 관리자 웹, Agent 웹, 고객 웹, NestJS/Socket.IO 서버, PostgreSQL을 포함합니다.
 
 ## Docker로 가장 빠르게 실행하기
@@ -84,3 +86,4 @@ pnpm build
 5. `docs/11_User_Manual.md` — 실행·운영 매뉴얼
 6. `CHANGELOG_KO.md` — 시간순 수정 이력
 7. `docs/12_Feature_Status.md` — 현재 구현·부분 구현·미구현 기능표
+8. `docs/13_Commercial_Release_Checklist_KO.md` — 상업 출시 전 라이선스·개인정보·운영 점검표

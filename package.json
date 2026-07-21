@@ -15,6 +15,7 @@
     "test": "pnpm -r test",
     "prelint": "pnpm --filter @hotel-chat/shared build && pnpm db:generate",
     "lint": "pnpm -r lint",
+    "licenses:list": "pnpm licenses list --prod",
     "db:generate": "pnpm --filter @hotel-chat/server prisma:generate",
     "db:migrate": "dotenv -e .env -- pnpm --filter @hotel-chat/server prisma:migrate",
     "db:seed": "dotenv -e .env -- pnpm --filter @hotel-chat/server prisma:seed"

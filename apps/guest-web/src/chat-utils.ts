@@ -7,3 +7,8 @@ export function remainingTime(expiresAt: string, now: number): string {
   const seconds = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now) / 1000));
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
+
+/** 게스트 모바일에서 전체 화면을 움직이지 않고 메시지 목록만 최신 말풍선으로 이동합니다. */
+export function scrollChatToLatest(container: Pick<HTMLElement, "scrollHeight" | "scrollTo">, smooth: boolean): void {
+  container.scrollTo({ top: container.scrollHeight, behavior: smooth ? "smooth" : "auto" });
+}

@@ -1,3 +1,5 @@
+import { AUTH_INVALID_EVENT } from "./auth-storage";
+
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:4000/api";
 
 /** 서버가 반환하는 상담 화면용 최소 타입입니다. */
@@ -24,16 +26,20 @@ export interface MessageView {
 
 /** 모든 REST 요청에서 오류 본문을 읽어 사용자가 이해할 수 있는 메시지로 바꿉니다. */
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers: { "content-type": "application/json", ...(init.headers ?? {}) } });
+  const requestHeaders = new Headers(init.headers);
+  if (!requestHeaders.has("content-type")) requestHeaders.set("content-type", "application/json");
+  const response = await fetch(`${API_URL}${path}`, { ...init, headers: requestHeaders });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
+    // 장기 저장된 JWT가 만료되거나 서버에서 거부되면 화면 상태도 즉시 로그아웃으로 전환합니다.
+    if (response.status === 401 && requestHeaders.has("authorization") && typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_INVALID_EVENT));
     const message = Array.isArray(body.message) ? body.message.join(", ") : body.message;
     throw new Error(message ?? "서버 요청에 실패했습니다.");
   }
   return body as T;
 }
 
-/** Agent 로그인 후 REST와 WebSocket에서 함께 사용하는 짧은 JWT를 반환합니다. */
+/** Agent 로그인 후 REST와 WebSocket에서 함께 사용하는 24시간 콜센터용 JWT를 반환합니다. */
 export function login(loginId: string, password: string) {
   return request<{ accessToken: string; agent: { id: string; name: string; role: "AGENT" } }>("/auth/agent/login", { method: "POST", body: JSON.stringify({ loginId, password }) });
 }

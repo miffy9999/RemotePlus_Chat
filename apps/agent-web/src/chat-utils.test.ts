@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { mergeMessage, remainingTime } from "./chat-utils";
+import { describe, expect, it, vi } from "vitest";
+import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
 
 describe("Agent 채팅 화면 유틸리티", () => {
   /** 승인 이벤트와 방 이벤트가 겹쳐도 같은 메시지는 한 번만 표시해야 합니다. */
@@ -18,5 +18,11 @@ describe("Agent 채팅 화면 유틸리티", () => {
     const now = Date.parse("2026-07-21T00:00:00.000Z");
     expect(remainingTime("2026-07-21T00:01:05.000Z", now)).toBe("01:05");
     expect(remainingTime("2026-07-20T23:59:59.000Z", now)).toBe("00:00");
+  });
+  /** 새 메시지는 페이지가 아니라 전달된 채팅 컨테이너의 마지막 위치로만 이동해야 합니다. */
+  it("채팅 컨테이너를 마지막 메시지로 스크롤한다", () => {
+    const scrollTo = vi.fn();
+    scrollChatToLatest({ scrollHeight: 720, scrollTo }, true);
+    expect(scrollTo).toHaveBeenCalledWith({ top: 720, behavior: "smooth" });
   });
 });

@@ -23,8 +23,6 @@ services:
         generateValue: true
       - key: ACCESS_KEY_ENCRYPTION_SECRET
         generateValue: true
-      - key: JWT_EXPIRES_IN
-        value: 15m
       - key: WEB_ORIGINS
         sync: false
       - key: GUEST_PUBLIC_URL

@@ -23,7 +23,8 @@ export class AuthService {
 
     const payload: StaffTokenPayload = { sub: agent.id, role: agent.role, kind: "staff" };
     this.logger.log(JSON.stringify({ event: "login.succeeded", role: agent.role, staffId: agent.id }));
-    return { accessToken: this.sign(payload, process.env.JWT_EXPIRES_IN ?? "15m"), agent: { id: agent.id, name: agent.name, role: agent.role } };
+    // 콜센터 PC는 24시간 상시 운영하므로 직원 JWT에는 만료 시각을 넣지 않습니다. 각 요청에서 계정 활성 상태를 다시 확인해 삭제 계정은 즉시 차단합니다.
+    return { accessToken: sign(payload, this.secret()), agent: { id: agent.id, name: agent.name, role: agent.role } };
   }
 
   /** 접근 키 검증 성공 후 상담 생성에만 사용할 수 있는 10분짜리 제한 토큰을 발급합니다. */
@@ -38,6 +39,18 @@ export class AuthService {
     } catch {
       throw new UnauthorizedException("인증 토큰이 없거나 만료되었습니다.");
     }
+  }
+
+  /**
+   * 서명된 직원 토큰의 계정이 현재도 존재하고 활성 상태이며 역할이 동일한지 DB에서 확인합니다.
+   * 만료 없는 토큰을 사용하더라도 관리자가 계정을 삭제하거나 비활성화하면 다음 요청부터 즉시 거부합니다.
+   */
+  async verifyActiveStaff(token: string): Promise<StaffTokenPayload> {
+    const identity = this.verifyToken(token);
+    if (identity.kind !== "staff") throw new UnauthorizedException("직원 인증 토큰이 아닙니다.");
+    const agent = await this.prisma.agent.findUnique({ where: { id: identity.sub }, select: { role: true, status: true } });
+    if (!agent || agent.status !== "ACTIVE" || agent.role !== identity.role) throw new UnauthorizedException("사용할 수 없는 직원 계정입니다.");
+    return identity;
   }
 
   private sign(payload: object, expiresIn: string): string {

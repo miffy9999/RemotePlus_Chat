@@ -1,5 +1,39 @@
 # 프로젝트 변경 이력
 
+## 2026-07-21 16:54:34 +09:00
+
+### 수정한 파일
+
+- Agent 인증·API·화면·스타일·HTML: `apps/agent-web/src/auth-storage.ts`, `apps/agent-web/src/auth-storage.test.ts`, `apps/agent-web/src/api.ts`, `apps/agent-web/src/main.tsx`, `apps/agent-web/src/styles.css`, `apps/agent-web/index.html`
+- 고객 화면·스타일·HTML: `apps/guest-web/src/main.tsx`, `apps/guest-web/src/styles.css`, `apps/guest-web/index.html`
+- 서버 직원 인증 경계와 테스트: `apps/server/src/modules/auth/auth.service.ts`, `apps/server/src/modules/auth/request-auth.ts`, `apps/server/src/modules/admin/admin.controller.ts`, `apps/server/src/modules/chat-sessions/chat-sessions.controller.ts`, `apps/server/src/modules/realtime/chat.gateway.ts`, `apps/server/tests/auth-service.spec.ts`
+- 실행 설정: `.env.example`, `compose.yaml`, `render.yaml`, `package.json`
+- 라이선스·상업 출시 문서: `THIRD_PARTY_NOTICES.md`, `docs/13_Commercial_Release_Checklist_KO.md`, `README.md`
+- 설계·매뉴얼·기능 현황: `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용
+
+- Agent·관리자 인증은 사용자 결정에 따라 `sessionStorage`를 유지하면서 저장 형식과 구버전 JWT 만료를 검증하고, 401 응답 시 자동 로그아웃하도록 보완했습니다.
+- 24시간 콜센터 PC에서 재로그인을 요구하지 않도록 직원 JWT의 만료 시각을 제거했습니다. 대신 모든 REST·WebSocket 인증에서 DB의 계정 존재·활성 상태·역할을 다시 확인합니다.
+- Agent와 고객 채팅에 메시지 컨테이너 전용 자동 스크롤을 추가하고, 상담 목록으로 돌아갈 때 기존 문서 스크롤 위치를 복원했습니다.
+- 게스트 모바일 채팅을 최우선으로 바깥 카드·그림자 없는 전체화면 메신저 구조로 구성하고, 동적 뷰포트 전체 높이·안전 영역·가상 키보드 리사이즈·44px 이상 입력 동작 영역을 적용했습니다. Agent 상담 목록과 관리자 표도 모바일 카드 UI로 전환했습니다.
+- 두 웹 앱에 완전한 HTML 문서, viewport·theme-color 메타데이터와 모바일 안전 영역 설정을 추가했습니다.
+- 현재 의존성의 라이선스 분포와 상업 이용 조건을 점검해 제3자 고지와 상업 출시 체크리스트를 추가했습니다.
+
+### 수정 이유
+
+상시 운영 콜센터의 반복 로그인, 새 메시지를 놓치는 채팅 스크롤, 상담 종료 후 페이지가 맨 위로 이동하는 현상, 모바일에서 PC 표를 그대로 보여 읽기 어려운 문제를 해결하기 위해 수정했습니다. 테스트 운영 이후 상업 출시를 준비할 때 오픈소스 고지와 개인정보·운영 보완 항목을 빠뜨리지 않도록 별도 문서로 관리합니다.
+
+### 확인 방법
+
+- `pnpm test`: 서버 19개, Agent 웹 8개, Guest 웹 4개 테스트가 모두 통과했습니다.
+- `pnpm lint`: 공유 패키지와 서버·Agent 웹·Guest 웹 타입 검사가 모두 통과했습니다.
+- `pnpm build`: 서버와 두 웹 앱의 프로덕션 빌드가 모두 통과했습니다.
+- `pnpm audit --prod`: 알려진 production 의존성 취약점이 0건임을 확인했습니다.
+- `pnpm licenses list --prod --json`: GPL·AGPL·LGPL·SSPL 계열이 없고 MIT·Apache-2.0·BSD·ISC·0BSD·CC-BY-4.0 구성임을 확인했습니다.
+- Chrome 500×844 렌더링으로 모바일 로그인·고객 동의 화면의 카드 너비, 입력 요소, 안전 여백을 확인했습니다.
+- `git diff --check`로 공백 오류를 확인합니다.
+
 ## 2026-07-21 16:29:29 +09:00
 
 ### 수정한 파일
