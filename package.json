@@ -4,9 +4,11 @@
   "private": true,
   "packageManager": "pnpm@10.12.1",
   "scripts": {
+    "predev": "pnpm --filter @hotel-chat/shared build",
     "dev": "pnpm --parallel --filter './apps/*' dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
+    "prelint": "pnpm --filter @hotel-chat/shared build",
     "lint": "pnpm -r lint",
     "db:generate": "pnpm --filter @hotel-chat/server prisma:generate",
     "db:migrate": "dotenv -e .env -- pnpm --filter @hotel-chat/server prisma:migrate",

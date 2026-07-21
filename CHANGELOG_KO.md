@@ -2,6 +2,26 @@
 
 모든 시각은 Asia/Tokyo(UTC+09:00)를 기준으로 기록한다. 최신 변경을 위에 추가한다.
 
+## 2026-07-21 12:09:36 +09:00
+
+### 수정한 파일
+
+- 루트 실행 명령: `package.json`
+- 변경 이력: `CHANGELOG_KO.md`
+
+### 수정 내용
+
+- `pnpm lint` 실행 전에 `@hotel-chat/shared` 타입 패키지를 자동으로 빌드하는 `prelint` 명령을 추가했다.
+- `pnpm dev` 실행 전에도 shared 패키지를 자동 빌드하는 `predev` 명령을 추가했다.
+
+### 수정 이유
+
+새 clone에서는 Git에서 제외된 `packages/shared/dist`가 없기 때문에 서버가 `@hotel-chat/shared`의 타입과 실행 파일을 찾지 못했다. 사용자가 별도 선행 명령을 외우지 않아도 lint와 개발 서버가 정상 실행되도록 하기 위해서다.
+
+### 확인 방법
+
+- `packages/shared/dist`가 없는 상태에서 `pnpm lint`를 실행해 shared 빌드 후 전체 TypeScript 검사가 통과하는지 확인한다.
+
 ## 2026-07-21 11:53:31 +09:00
 
 ### 수정한 파일
