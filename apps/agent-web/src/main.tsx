@@ -3,20 +3,10 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { io, type Socket } from "socket.io-client";
 import { acceptSession, closeSession, createAdminAgent, createHotel, createRoom, getMessages, listAdminAgents, listHotels, listRooms, listSessions, login, loginAdmin, type AdminAgentView, type HotelView, type MessageView, type RoomView, type SessionView, SOCKET_URL } from "./api";
+import { mergeMessage, remainingTime } from "./chat-utils";
 import "./styles.css";
 
 interface AgentAuth { accessToken: string; agent: { id: string; name: string; role: "AGENT" | "ADMIN" } }
-
-/** 새 메시지와 새 상담을 ID 기준으로 병합해 재연결·중복 이벤트에도 화면 중복을 방지합니다. */
-function mergeMessage(items: MessageView[], incoming: MessageView): MessageView[] {
-  return items.some((item) => item.id === incoming.id) ? items : [...items, incoming].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-}
-
-/** 서버 만료 시각을 기준으로 화면에 표시할 MM:SS 문자열을 계산합니다. */
-function remainingTime(expiresAt: string, now: number): string {
-  const seconds = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now) / 1000));
-  return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-}
 
 /** Agent 인증 정보는 탭 종료 시 제거되는 sessionStorage에만 보관합니다. */
 function readAuth(): AgentAuth | null {

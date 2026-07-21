@@ -2,14 +2,11 @@ import React, { FormEvent, useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { io, type Socket } from "socket.io-client";
 import { createSession, getMessages, getSession, SOCKET_URL, type GuestMessage, type GuestSession, type StoredGuestAccess, verifyAccess } from "./api";
+import { mergeMessage, remainingTime } from "./chat-utils";
 import "./styles.css";
 
 type ScreenState = "loading" | "consent" | "ready" | "error";
 
-/** 메시지를 DB ID로 병합해 승인·재연결 이력이 같은 메시지를 두 번 표시하지 않게 합니다. */
-function mergeMessage(items: GuestMessage[], incoming: GuestMessage): GuestMessage[] { return items.some((item) => item.id === incoming.id) ? items : [...items, incoming].sort((a, b) => a.createdAt.localeCompare(b.createdAt)); }
-/** 서버의 expiresAt을 기준으로 남은 시간을 계산하며 음수가 되지 않게 합니다. */
-function remainingTime(expiresAt: string, now: number): string { const seconds = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now) / 1000)); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; }
 /** 접근 키별 상담 토큰을 현재 브라우저 탭에만 보관해 새로고침 복구와 노출 최소화를 함께 만족합니다. */
 function storageKey(accessKey: string): string { return `hotel-chat-guest:${accessKey}`; }
 

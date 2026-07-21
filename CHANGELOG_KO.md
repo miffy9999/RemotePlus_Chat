@@ -2,6 +2,29 @@
 
 모든 시각은 Asia/Tokyo(UTC+09:00)를 기준으로 기록한다. 최신 변경을 위에 추가한다.
 
+## 2026-07-21 12:12:26 +09:00
+
+### 수정한 파일
+
+- Agent 테스트: `apps/agent-web/src/chat-utils.ts`, `apps/agent-web/src/chat-utils.test.ts`, `apps/agent-web/src/main.tsx`
+- 투숙객 테스트: `apps/guest-web/src/chat-utils.ts`, `apps/guest-web/src/chat-utils.test.ts`, `apps/guest-web/src/main.tsx`
+- 루트 테스트 명령: `package.json`
+- 변경 이력: `CHANGELOG_KO.md`
+
+### 수정 내용
+
+- 양쪽 채팅 화면의 메시지 중복 제거·시간순 정렬과 남은 시간 계산을 독립 유틸리티로 분리했다.
+- Agent와 투숙객 웹에 각각 3개씩 실제 Vitest 단위 테스트를 추가했다.
+- 전체 테스트 전에 shared 패키지를 자동 빌드하는 `pretest` 명령을 추가했다.
+
+### 수정 이유
+
+프런트 패키지에 테스트 명령만 있고 테스트 파일이 없어 새 clone의 `pnpm test`가 종료 코드 1로 실패하던 문제를 해결하고, 재연결과 만료 표시의 핵심 화면 로직을 실제로 검증하기 위해서다.
+
+### 확인 방법
+
+- `pnpm test`로 Agent 3개, 투숙객 3개, 서버 9개 테스트가 모두 통과하는지 확인한다.
+
 ## 2026-07-21 12:09:36 +09:00
 
 ### 수정한 파일
