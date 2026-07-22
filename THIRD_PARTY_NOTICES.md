@@ -1,6 +1,6 @@
 # 제3자 오픈소스 고지
 
-마지막 점검: 2026-07-21
+마지막 점검: 2026-07-22
 
 이 프로젝트는 자체 코드에 MIT 라이선스를 사용하며, 아래 오픈소스 소프트웨어를 포함하거나 빌드·운영에 사용한다. 현재 `pnpm-lock.yaml`을 `pnpm licenses list --prod --json`으로 검사한 결과 GPL, AGPL, LGPL, SSPL 계열은 발견되지 않았다.
 
@@ -20,14 +20,17 @@
 | Helmet | 8.3.0 | MIT |
 | jsonwebtoken | 9.0.3 | MIT |
 | dotenv | 16.6.1 | BSD-2-Clause |
+| qrcode | 1.5.4 | MIT |
+
+`qrcode`는 Copyright (c) 2012 Ryan Day의 MIT 라이선스 소프트웨어다. 이 프로젝트는 객실 고객 URL을 브라우저에서 QR PNG로 만드는 데 사용하며, 원본 저작권 및 라이선스 고지는 [soldair/node-qrcode](https://github.com/soldair/node-qrcode)와 설치 패키지의 `LICENSE`에서 확인할 수 있다.
 
 ## 전체 잠금 파일의 라이선스 분포
 
 | 라이선스 | 패키지 항목 수 |
 |---|---:|
-| MIT | 213 |
+| MIT | 235 |
 | Apache-2.0 | 13 |
-| ISC | 10 |
+| ISC | 17 |
 | BSD-3-Clause | 6 |
 | BSD-2-Clause | 2 |
 | 0BSD | 1 |

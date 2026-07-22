@@ -1,5 +1,33 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 11:04:58 +09:00
+
+### 수정한 파일
+
+- QR 생성·테스트·관리자 UI: `apps/agent-web/src/qr-code.ts`, `apps/agent-web/src/qr-code.test.ts`, `apps/agent-web/src/main.tsx`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/public/third-party-notices.txt`
+- 의존성과 라이선스 고지: `apps/agent-web/package.json`, `pnpm-lock.yaml`, `THIRD_PARTY_NOTICES.md`
+- 원본 사양·설계·흐름·매뉴얼·기능 현황: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`, `README.md`
+
+### 수정 내용
+
+- 관리자 룸 목록에 활성 `QR 보기` 버튼을 추가하고 호텔명·객실 번호·고객 URL을 확인할 수 있는 반응형 미리보기 모달을 구현했습니다.
+- 현재 고객 URL을 오류 정정 등급 H, 4모듈 흰 여백, 약 1024px 고해상도 PNG로 브라우저 안에서만 생성하고 내려받도록 구현했습니다. QR 모듈을 흐리지 않도록 실제 한 변은 URL 길이에 따라 목표 크기보다 몇 px 작을 수 있습니다.
+- 객실에 인쇄하여 장기간 비치한다는 운영 결정에 따라 QR 정기 만료·갱신·재발급은 두지 않았습니다. 객실·접근 키 삭제와 고객 도메인 변경의 영향을 화면과 문서에 명시했습니다.
+- 상업 인쇄 전 운영 고객 도메인 확정, 실제 휴대전화 스캔 시험, 가로·세로 3cm 이상 인쇄, QR 흰 여백 유지 안내를 추가했습니다.
+- MIT 라이선스의 `qrcode` 1.5.4와 타입 정의를 고정 버전으로 추가하고 제3자 고지와 전체 라이선스 분포를 갱신했습니다. 실제 Agent 웹 배포물에도 원저작권과 MIT 전문을 포함하고 QR 모달에서 열 수 있게 했습니다.
+
+### 수정 이유
+
+호텔별 객실에 한 번 인쇄해 계속 사용할 수 있는 영구 QR 진입 경로를 제공하면서, QR URL을 외부 서비스에 노출하거나 서버에 중복 저장하지 않고 상업 배포 시 오픈소스 라이선스 고지 의무도 지키기 위해 수정했습니다.
+
+### 확인 방법
+
+- `pnpm test`: 서버 19개, Agent 웹 11개, Guest 웹 4개 등 총 34개 테스트가 통과했습니다.
+- `pnpm lint`, `pnpm build`: 전체 워크스페이스 타입 검사와 프로덕션 빌드가 통과했습니다.
+- `pnpm audit --prod`: 알려진 production 의존성 취약점이 0건임을 확인했습니다.
+- `pnpm licenses list --prod --json`에서 production 의존성은 MIT 235, Apache-2.0 13, ISC 17, BSD-3-Clause 6, BSD-2-Clause 2, 0BSD 1, CC-BY-4.0 1개이며 GPL·AGPL·LGPL·SSPL 계열이 없음을 확인했습니다.
+- `git diff --check`로 공백 오류가 없음을 확인했습니다.
+
 ## 2026-07-21 16:54:34 +09:00
 
 ### 수정한 파일

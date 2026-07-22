@@ -6,6 +6,7 @@ import { acceptSession, closeSession, createAdminAgent, createHotel, createRoom,
 import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
 import { LanguageProvider, LanguageSwitcher, useI18n } from "./i18n";
 import { AUTH_INVALID_EVENT, clearStoredAuth, readStoredAuth, saveStoredAuth, type AgentAuth } from "./auth-storage";
+import { createRoomQrDataUrl, createRoomQrFileName, downloadRoomQr } from "./qr-code";
 import "./styles.css";
 
 /** 기본 진입 화면에서 사용자가 자신의 역할을 먼저 선택해 관리자와 Agent 인증 흐름을 명확히 구분합니다. */
@@ -124,18 +125,68 @@ function SessionTable({ items, action }: { items: SessionView[]; action: (sessio
 /** 브라우저 정책으로 소리가 차단될 수 있으므로 실패해도 화면 동작은 계속합니다. */
 function playNotificationSound(): void { try { const context = new AudioContext(); const oscillator = context.createOscillator(); oscillator.connect(context.destination); oscillator.frequency.value = 880; oscillator.start(); oscillator.stop(context.currentTime + 0.12); } catch { /* 화면 강조가 기본 알림 수단입니다. */ } }
 
-/** 기존 관리자 화면은 Phase 3A 전까지 QR 비활성 원칙을 보여주는 정적 화면으로 유지합니다. */
 /** 관리자 전용 로그인은 Agent 토큰과 다른 저장 키를 사용해 역할 화면이 섞이지 않게 합니다. */
 function AdminLogin({ onLogin }: { onLogin: (auth: AgentAuth) => void }): React.JSX.Element { const {t}=useI18n(); const [loginId,setLoginId]=useState("admin"); const [password,setPassword]=useState(""); const [error,setError]=useState(""); async function submit(e:FormEvent){e.preventDefault();try{const value=await loginAdmin(loginId,password);saveStoredAuth(value);onLogin(value);}catch(reason){setError(reason instanceof Error?reason.message:"로그인에 실패했습니다.");}} return <div className="login-shell"><LanguageSwitcher/><form className="login-card" onSubmit={submit}><div className="brand dark">REMOTE<span>+</span></div><h1>{t("관리자 로그인")}</h1><label>{t("로그인 ID")}<input value={loginId} onChange={e=>setLoginId(e.target.value)} autoComplete="username"/></label><label>{t("비밀번호")}<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password"/></label>{error&&<div className="error-box">{error}</div>}<button>{t("로그인")}</button></form></div>; }
 
 /** 관리자만 받은 투숙객 주소를 클립보드에 복사합니다. 실패하면 호출부가 화면 오류로 안내합니다. */
 async function copyGuestUrl(url: string): Promise<void> { await navigator.clipboard.writeText(url); }
 
-/** 관리자 MVP는 Agent·호텔·룸 CRUD와 룸별 투숙객 주소 조회를 제공하며 QR은 후속 확장 자리만 둡니다. */
+/**
+ * 선택한 객실 고객 URL을 고정 QR로 미리 보고 PNG로 내려받습니다.
+ * 이미지는 브라우저 메모리에서만 생성해 접근키가 포함된 URL을 별도 서버나 저장소로 전송하지 않습니다.
+ */
+function RoomQrModal({ room, onClose }: { room: RoomView; onClose: () => void }): React.JSX.Element {
+  const { t } = useI18n();
+  const [dataUrl, setDataUrl] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    setDataUrl("");
+    setError("");
+
+    /** 비동기 생성 도중 모달이 닫혀도 이미 사라진 컴포넌트의 상태를 갱신하지 않습니다. */
+    if (room.guestUrl) {
+      void createRoomQrDataUrl(room.guestUrl)
+        .then((value) => { if (active) setDataUrl(value); })
+        .catch(() => { if (active) setError(t("QR 코드를 만들 수 없습니다.")); });
+    } else {
+      setError(t("QR 코드를 만들 수 없습니다."));
+    }
+
+    function closeOnEscape(event: KeyboardEvent): void { if (event.key === "Escape") onClose(); }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => { active = false; window.removeEventListener("keydown", closeOnEscape); };
+  }, [onClose, room.guestUrl, t]);
+
+  function download(): void {
+    if (!dataUrl) return;
+    downloadRoomQr(dataUrl, createRoomQrFileName(room.hotel.name, room.roomNumber));
+  }
+
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section className="qr-modal" role="dialog" aria-modal="true" aria-labelledby="room-qr-title">
+      <div className="qr-modal-heading">
+        <div><span>{t("고정 QR 안내")}</span><h2 id="room-qr-title">{room.hotel.name} {room.roomNumber} · {t("객실 고정 QR")}</h2></div>
+        <button type="button" className="link-button qr-close" aria-label={t("닫기")} onClick={onClose}>×</button>
+      </div>
+      <div className="qr-preview" aria-live="polite">
+        {dataUrl ? <img src={dataUrl} alt={`${room.hotel.name} ${room.roomNumber} ${t("객실 고정 QR")}`} /> : error ? <div className="error-box">{error}</div> : <div className="qr-loading">{t("QR 생성 중…")}</div>}
+      </div>
+      <p className="qr-permanent-note"><strong>{t("이 QR은 객실에 인쇄하여 비치하는 고정 QR이며 정기 갱신되지 않습니다.")}</strong><br />{t("인쇄 전에 운영 고객 도메인을 확정하고 실제 휴대전화로 스캔을 시험하세요.")}<br />{t("권장 인쇄 크기는 가로·세로 3cm 이상이며 QR 주변 흰 여백을 자르지 마세요.")}</p>
+      {room.guestUrl && <a className="qr-url" href={room.guestUrl} target="_blank" rel="noreferrer">{room.guestUrl}</a>}
+      <a className="qr-license" href="/third-party-notices.txt" target="_blank" rel="noreferrer">{t("오픈소스 라이선스 고지")}</a>
+      <div className="qr-actions"><button type="button" className="secondary" onClick={onClose}>{t("닫기")}</button><button type="button" disabled={!dataUrl} onClick={download}>{t("PNG 다운로드")}</button></div>
+    </section>
+  </div>;
+}
+
+/** 관리자 화면은 Agent·호텔·룸 CRUD, 고객 주소와 객실별 고정 QR 관리를 제공합니다. */
 function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const { language, t } = useI18n();
   const [agents, setAgents] = useState<AdminAgentView[]>([]); const [hotels, setHotels] = useState<HotelView[]>([]); const [rooms, setRooms] = useState<RoomView[]>([]); const [filter, setFilter] = useState(""); const [error, setError] = useState("");
   const [agentForm, setAgentForm] = useState({ name: "", loginId: "", password: "" }); const [hotelName, setHotelName] = useState(""); const [roomNumber, setRoomNumber] = useState(""); const [roomHotelId, setRoomHotelId] = useState("");
+  const [qrRoom, setQrRoom] = useState<RoomView | null>(null);
   async function refresh() { try { const [a,h,r] = await Promise.all([listAdminAgents(auth.accessToken), listHotels(auth.accessToken), listRooms(auth.accessToken, filter || undefined)]); setAgents(a); setHotels(h); setRooms(r); setRoomHotelId((current) => h.some((hotel) => hotel.id === current) ? current : (h[0]?.id ?? "")); setError(""); } catch (reason) { setError(reason instanceof Error ? reason.message : "관리 데이터를 불러오지 못했습니다."); } }
   useEffect(() => { void refresh(); }, [filter]);
   async function addAgent(e: FormEvent) { e.preventDefault(); try { await createAdminAgent(auth.accessToken, agentForm); setAgentForm({ name: "", loginId: "", password: "" }); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Agent 추가 실패"); } }
@@ -146,7 +197,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   async function removeHotel(hotel: HotelView) { const message=language==="ja"?`${hotel.name}を削除しますか？配下の客室とすべての相談・メッセージも削除され、元に戻せません。`:`${hotel.name} 호텔을 삭제할까요? 하위 룸과 모든 상담·메시지도 함께 삭제되며 복구할 수 없습니다.`; if (!window.confirm(message)) return; try { await deleteHotel(auth.accessToken, hotel.id); if (filter === hotel.id) setFilter(""); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : "호텔 삭제 실패"); } }
   async function removeRoom(room: RoomView) { const message=language==="ja"?`${room.hotel.name} ${room.roomNumber}号室を削除しますか？アクセスキーと相談・メッセージも削除され、元に戻せません。`:`${room.hotel.name} ${room.roomNumber} 룸을 삭제할까요? 접근키와 상담·메시지도 함께 삭제되며 복구할 수 없습니다.`; if (!window.confirm(message)) return; try { await deleteRoom(auth.accessToken, room.id); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : "룸 삭제 실패"); } }
   function logout() { clearStoredAuth("ADMIN"); location.href = "/admin/login"; }
-  return <div className="admin-shell"><header><div><div className="brand dark">REMOTE<span>+</span></div><h1>{t("관리자 페이지")}</h1></div><div className="admin-header-actions"><LanguageSwitcher/><button className="secondary" onClick={logout}>{t("로그아웃")}</button></div></header>{error && <div className="error-box">{error}</div>}<section className="card"><h2>{t("Agent 관리")}</h2><form className="inline-form" onSubmit={addAgent}><input aria-label={t("Agent 이름")} placeholder={t("이름")} value={agentForm.name} onChange={(e)=>setAgentForm({...agentForm,name:e.target.value})}/><input aria-label={t("Agent 로그인 ID")} placeholder={t("로그인 ID")} value={agentForm.loginId} onChange={(e)=>setAgentForm({...agentForm,loginId:e.target.value})}/><input aria-label={t("Agent 비밀번호")} type="password" placeholder={t("영문+숫자 8자 이상")} value={agentForm.password} onChange={(e)=>setAgentForm({...agentForm,password:e.target.value})}/><button>{t("Agent 추가")}</button></form><div className="table-wrap admin-table"><table><thead><tr><th>{t("이름")}</th><th>{t("ID")}</th><th>{t("상태")}</th><th>{t("관리")}</th></tr></thead><tbody>{agents.map((agent)=><tr key={agent.id}><td data-label={t("이름")}>{agent.name}</td><td data-label={t("ID")}>{agent.loginId}</td><td data-label={t("상태")}>{agent.status}</td><td data-label={t("관리")}><button className="danger compact" onClick={() => void removeAgent(agent)}>{t("삭제")}</button></td></tr>)}</tbody></table></div></section><section className="card"><h2>{t("호텔·룸 관리")}</h2><form className="inline-form" onSubmit={addHotel}><input aria-label={t("호텔 이름")} placeholder={t("호텔 이름")} value={hotelName} onChange={(e)=>setHotelName(e.target.value)}/><button>{t("호텔 추가")}</button></form><form className="inline-form" onSubmit={addRoom}><select aria-label={t("룸을 추가할 호텔")} value={roomHotelId} onChange={(e)=>setRoomHotelId(e.target.value)}>{hotels.map((hotel)=><option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select><input aria-label={t("객실 번호")} placeholder={t("객실 번호")} value={roomNumber} onChange={(e)=>setRoomNumber(e.target.value)}/><button>{t("룸 추가")}</button><button type="button" className="danger" disabled={!roomHotelId} onClick={() => { const hotel = hotels.find((item) => item.id === roomHotelId); if (hotel) void removeHotel(hotel); }}>{t("선택 호텔 삭제")}</button></form><label className="filter">{t("호텔 필터")}<select value={filter} onChange={(e)=>setFilter(e.target.value)}><option value="">{t("전체 호텔")}</option>{hotels.map((hotel)=><option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label><div className="table-wrap admin-table"><table><thead><tr><th>{t("호텔")}</th><th>{t("객실")}</th><th>{t("상태")}</th><th>{t("투숙객 주소")}</th><th>{t("QR 관리")}</th><th>{t("관리")}</th></tr></thead><tbody>{rooms.map((room)=><tr key={room.id}><td data-label={t("호텔")}>{room.hotel.name}</td><td data-label={t("객실")}>{room.roomNumber}</td><td data-label={t("상태")}>{room.status}</td><td data-label={t("투숙객 주소")} className="room-link-cell">{room.guestUrl ? <><a href={room.guestUrl} target="_blank" rel="noreferrer">{t("상담 링크 열기")}</a><button className="secondary compact" onClick={() => void copyGuestUrl(room.guestUrl!).catch(()=>setError("주소를 복사하지 못했습니다."))}>{t("주소 복사")}</button></> : <span>{t("주소 없음")}</span>}</td><td data-label={t("QR 관리")}><button disabled title={t("QR 관리는 MVP 이후 제공됩니다.")}>{t("준비 중")}</button></td><td data-label={t("관리")}><button className="danger compact" onClick={() => void removeRoom(room)}>{t("삭제")}</button></td></tr>)}</tbody></table></div></section></div>;
+  return <div className="admin-shell"><header><div><div className="brand dark">REMOTE<span>+</span></div><h1>{t("관리자 페이지")}</h1></div><div className="admin-header-actions"><LanguageSwitcher/><button className="secondary" onClick={logout}>{t("로그아웃")}</button></div></header>{error && <div className="error-box">{error}</div>}<section className="card"><h2>{t("Agent 관리")}</h2><form className="inline-form" onSubmit={addAgent}><input aria-label={t("Agent 이름")} placeholder={t("이름")} value={agentForm.name} onChange={(e)=>setAgentForm({...agentForm,name:e.target.value})}/><input aria-label={t("Agent 로그인 ID")} placeholder={t("로그인 ID")} value={agentForm.loginId} onChange={(e)=>setAgentForm({...agentForm,loginId:e.target.value})}/><input aria-label={t("Agent 비밀번호")} type="password" placeholder={t("영문+숫자 8자 이상")} value={agentForm.password} onChange={(e)=>setAgentForm({...agentForm,password:e.target.value})}/><button>{t("Agent 추가")}</button></form><div className="table-wrap admin-table"><table><thead><tr><th>{t("이름")}</th><th>{t("ID")}</th><th>{t("상태")}</th><th>{t("관리")}</th></tr></thead><tbody>{agents.map((agent)=><tr key={agent.id}><td data-label={t("이름")}>{agent.name}</td><td data-label={t("ID")}>{agent.loginId}</td><td data-label={t("상태")}>{agent.status}</td><td data-label={t("관리")}><button className="danger compact" onClick={() => void removeAgent(agent)}>{t("삭제")}</button></td></tr>)}</tbody></table></div></section><section className="card"><h2>{t("호텔·룸 관리")}</h2><form className="inline-form" onSubmit={addHotel}><input aria-label={t("호텔 이름")} placeholder={t("호텔 이름")} value={hotelName} onChange={(e)=>setHotelName(e.target.value)}/><button>{t("호텔 추가")}</button></form><form className="inline-form" onSubmit={addRoom}><select aria-label={t("룸을 추가할 호텔")} value={roomHotelId} onChange={(e)=>setRoomHotelId(e.target.value)}>{hotels.map((hotel)=><option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select><input aria-label={t("객실 번호")} placeholder={t("객실 번호")} value={roomNumber} onChange={(e)=>setRoomNumber(e.target.value)}/><button>{t("룸 추가")}</button><button type="button" className="danger" disabled={!roomHotelId} onClick={() => { const hotel = hotels.find((item) => item.id === roomHotelId); if (hotel) void removeHotel(hotel); }}>{t("선택 호텔 삭제")}</button></form><label className="filter">{t("호텔 필터")}<select value={filter} onChange={(e)=>setFilter(e.target.value)}><option value="">{t("전체 호텔")}</option>{hotels.map((hotel)=><option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label><div className="table-wrap admin-table"><table><thead><tr><th>{t("호텔")}</th><th>{t("객실")}</th><th>{t("상태")}</th><th>{t("투숙객 주소")}</th><th>{t("QR 관리")}</th><th>{t("관리")}</th></tr></thead><tbody>{rooms.map((room)=><tr key={room.id}><td data-label={t("호텔")}>{room.hotel.name}</td><td data-label={t("객실")}>{room.roomNumber}</td><td data-label={t("상태")}>{room.status}</td><td data-label={t("투숙객 주소")} className="room-link-cell">{room.guestUrl ? <><a href={room.guestUrl} target="_blank" rel="noreferrer">{t("상담 링크 열기")}</a><button className="secondary compact" onClick={() => void copyGuestUrl(room.guestUrl!).catch(()=>setError("주소를 복사하지 못했습니다."))}>{t("주소 복사")}</button></> : <span>{t("주소 없음")}</span>}</td><td data-label={t("QR 관리")}><button type="button" className="compact" disabled={!room.guestUrl} onClick={() => setQrRoom(room)}>{t("QR 보기")}</button></td><td data-label={t("관리")}><button className="danger compact" onClick={() => void removeRoom(room)}>{t("삭제")}</button></td></tr>)}</tbody></table></div></section>{qrRoom && <RoomQrModal room={qrRoom} onClose={() => setQrRoom(null)} />}</div>;
 }
 
 function Page({ auth, title, subtitle, chatMode = false, children }: React.PropsWithChildren<{ auth: AgentAuth; title: string; subtitle: string; chatMode?: boolean }>): React.JSX.Element {
