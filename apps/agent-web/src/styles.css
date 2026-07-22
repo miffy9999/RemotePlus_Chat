@@ -42,6 +42,14 @@ main > header p, .section-head p { margin-bottom: 0; color: #6d778c; }
 .stats article::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 4px; background: #316bdb; }.stats article:first-child::before { background: #e4a72b; }.stats article:last-child::before { background: #8a94a7; }
 .stats span { color: #6d778c; font-size: 13px; font-weight: 700; }.stats strong { display: block; margin-top: 7px; font-size: 31px; }
 .card { margin-bottom: 22px; padding: 24px; background: white; border: 1px solid #e2e7f0; border-radius: 16px; box-shadow: 0 10px 28px rgba(33,48,79,.06); }
+.section-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
+.agent-notice { position: fixed; z-index: 50; top: 20px; right: 20px; width: min(390px, calc(100vw - 40px)); padding: 17px 18px; border: 1px solid #cad9f4; border-left: 5px solid #316bdb; border-radius: 14px; color: #16213a; background: white; box-shadow: 0 18px 46px rgba(25,45,83,.22); animation: notice-in .2s ease-out; }
+.agent-notice-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.agent-notice-heading strong { padding-top: 7px; font-size: 15px; }
+.agent-notice-heading .link-button { min-width: 34px; padding: 4px 7px; font-size: 22px; line-height: 1; }
+.agent-notice p { margin: 7px 0 0; color: #566078; font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.agent-notice-action { width: 100%; margin-top: 13px; padding: 10px 12px; }
+@keyframes notice-in { from { transform: translateY(-10px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; } th, td { padding: 15px 12px; text-align: left; border-bottom: 1px solid #edf0f4; } th { color: #778196; background: #f8f9fc; font-size: 12px; letter-spacing: .04em; } tbody tr:hover { background: #fafbfe; } tbody tr:last-child td { border-bottom: 0; }
 .badge { display: inline-flex; border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 800; }.badge.waiting { color: #8b651e; background: #fff5db; }.badge.active { color: #16835b; background: #e6f8f0; }.badge.closed, .badge.expired { color: #687083; background: #eef0f4; }
@@ -107,6 +115,9 @@ table { width: 100%; border-collapse: collapse; } th, td { padding: 15px 12px; t
   .section-head { align-items: flex-start; gap: 10px; }
   .section-head p { font-size: 12px; line-height: 1.45; }
   .section-head > button { flex: 0 0 auto; padding: 9px 11px; }
+  .section-actions { flex: 0 1 180px; flex-wrap: wrap; }
+  .section-actions button { flex: 1 1 auto; min-height: 38px; padding: 8px 10px; font-size: 12px; }
+  .agent-notice { top: max(10px, env(safe-area-inset-top)); right: 10px; width: calc(100vw - 20px); padding: 14px 15px; }
 
   /* 상담·관리 표를 모바일 카드 목록으로 전환해 가로 스크롤 없이 각 항목명과 값을 함께 보여줍니다. */
   .session-table, .admin-table { overflow: visible; }

@@ -1,5 +1,26 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 12:17:31 +09:00
+
+### 수정한 파일
+
+- Agent 수신 알림과 테스트: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/notification-utils.ts`, `apps/agent-web/src/notification-utils.test.ts`
+- 실행 안내와 사양·흐름·UI·설계·결정·매뉴얼·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 새 대기 상담은 단순 건수 증가가 아닌 상담 ID 차집합으로 판정해 0건에서 1건이 되는 경우도 놓치지 않게 했습니다.
+- 새 상담과 해당 Agent에게 배정된 모든 진행 상담의 고객 메시지에 호텔·객실·메시지 미리보기를 담은 8초 화면 팝업과 짧은 알림음을 제공합니다.
+- 새 상담 팝업은 여러 Agent가 같은 상담을 동시에 수락하지 않도록 자동 수락 대신 대기 목록으로 이동합니다.
+- Agent가 버튼을 눌러 권한을 허용한 경우, 탭이 백그라운드일 때만 브라우저 시스템 알림을 함께 표시합니다. 권한을 허용하지 않아도 앱 내부 팝업은 계속 동작합니다.
+- 한국어·일본어 UI와 모바일 화면에서도 알림 제어와 팝업을 사용할 수 있게 했습니다.
+
+### 확인 방법
+
+- 서버 24개, Agent 웹 15개, Guest 웹 6개 등 총 45개 테스트가 통과했습니다.
+- 새 목록 최초 로딩 제외, 0건에서 1건 전환 감지, 중복 알림 방지, 메시지 미리보기 길이 제한을 단위 테스트로 확인했습니다.
+- 전체 워크스페이스 TypeScript 검사와 프로덕션 빌드, `git diff --check`가 통과했습니다.
+
 ## 2026-07-22 12:03:01 +09:00
 
 ### 수정한 파일

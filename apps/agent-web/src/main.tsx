@@ -7,6 +7,7 @@ import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
 import { LanguageProvider, LanguageSwitcher, useI18n } from "./i18n";
 import { AUTH_INVALID_EVENT, clearStoredAuth, readStoredAuth, saveStoredAuth, type AgentAuth } from "./auth-storage";
 import { createRoomQrDataUrl, createRoomQrFileName, downloadRoomQr } from "./qr-code";
+import { findNewWaitingSessions, notificationPreview, waitingSessionIds } from "./notification-utils";
 import "./styles.css";
 
 /** 기본 진입 화면에서 사용자가 자신의 역할을 먼저 선택해 관리자와 Agent 인증 흐름을 명확히 구분합니다. */
@@ -85,34 +86,151 @@ function AgentChat({ auth, initial, onBack, onChanged }: { auth: AgentAuth; init
   return <Page auth={auth} chatMode title={`${session.room.roomNumber}${language === "ja" ? "号室の相談" : "호 상담"}`} subtitle={`${session.room.hotel.name} · ${session.language.toUpperCase()}`}><div className="chat-card"><div className="chat-toolbar"><button className="secondary" onClick={onBack}>{t("← 목록")}</button><div className="mobile-chat-title"><strong>{session.room.roomNumber}{language === "ja" ? "号室" : "호"}</strong><span>{session.room.hotel.name}</span></div><div className="chat-actions"><span className={`connection ${connection === "연결됨" ? "ok" : ""}`}>● {t(connection)}</span><strong>{session.status === "ACTIVE" ? remainingTime(session.expiresAt, now) : t("종료")}</strong><button className="danger" onClick={() => setShowCloseConfirm(true)} disabled={session.status !== "ACTIVE"}>{t("상담 종료")}</button></div></div>{error && <div className="error-box">{error}</div>}<div className="chat-messages" ref={messagesRef}>{messages.length === 0 && <div className="empty">{t("아직 메시지가 없습니다.")}</div>}{messages.map((message) => <div key={message.id} className={`bubble ${message.senderType === "AGENT" ? "mine" : "theirs"}`}><small>{t(message.senderType === "AGENT" ? "나" : "투숙객")} · {new Date(message.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</small><p>{message.content}</p></div>)}</div><form className="chat-composer" onSubmit={send}><input value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder={t(session.status === "ACTIVE" ? "메시지를 입력하세요" : "종료된 상담입니다")} disabled={session.status !== "ACTIVE"}/><button disabled={!input.trim() || session.status !== "ACTIVE"}>{t("전송")}</button></form></div>{showCloseConfirm && <div className="modal-backdrop"><section className="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="close-title"><h2 id="close-title">{t("상담을 종료할까요?")}</h2><p>{t("종료한 상담에는 더 이상 메시지를 보낼 수 없습니다.")}</p><div><button className="secondary" onClick={() => setShowCloseConfirm(false)}>{t("취소")}</button><button className="danger" onClick={() => void close()}>{t("상담 종료")}</button></div></section></div>}</Page>;
 }
 
-/** 상담 목록은 서버 데이터를 주기적으로 새로 받아 대기·진행·종료 상태를 보여줍니다. */
-function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
+interface AgentNotice {
+  id: string;
+  title: string;
+  body: string;
+  actionLabel?: string;
+}
+
+/** 화면을 보고 있지 않아도 새 상담을 알아볼 수 있도록 권한이 허용된 경우에만 운영체제 알림을 띄웁니다. */
+function showSystemNotification(title: string, body: string, tag: string): void {
+  if (!("Notification" in window) || Notification.permission !== "granted" || document.visibilityState !== "hidden") return;
+  try {
+    const notification = new Notification(title, { body, tag });
+    notification.onclick = () => { window.focus(); notification.close(); };
+  } catch { /* 브라우저 알림 실패와 관계없이 화면 팝업은 계속 표시됩니다. */ }
+}
+
+/** 하나의 최신 알림만 8초 동안 보여줘 연속 메시지가 상담 화면을 가득 덮지 않도록 합니다. */
+function AgentNoticePopup({ notice, onClose, onAction }: { notice: AgentNotice; onClose: () => void; onAction: () => void }): React.JSX.Element {
   const { t } = useI18n();
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    const timer = window.setTimeout(() => closeRef.current(), 8000);
+    return () => window.clearTimeout(timer);
+  }, [notice.id]);
+
+  return <aside className="agent-notice" role="alert" aria-live="assertive">
+    <div className="agent-notice-heading"><strong>{notice.title}</strong><button type="button" className="link-button" aria-label={t("알림 닫기")} onClick={onClose}>×</button></div>
+    <p>{notice.body}</p>
+    {notice.actionLabel && <button type="button" className="agent-notice-action" onClick={onAction}>{notice.actionLabel}</button>}
+  </aside>;
+}
+
+/** 상담 목록은 폴링으로 새 대기 상담을 찾고 Socket.IO로 담당 상담의 고객 메시지를 즉시 알립니다. */
+function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
+  const { language, t } = useI18n();
   const [sessions, setSessions] = useState<SessionView[]>([]);
   const [selected, setSelected] = useState<SessionView | null>(null);
   const [error, setError] = useState("");
-  const previousWaiting = useRef(0);
+  const [notice, setNotice] = useState<AgentNotice | null>(null);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(
+    () => typeof Notification === "undefined" ? "unsupported" : Notification.permission,
+  );
+  const knownWaitingIds = useRef<Set<string> | null>(null);
+  const activeSessionsRef = useRef<Map<string, SessionView>>(new Map());
+  const notificationSocketRef = useRef<Socket | null>(null);
+  const refreshInProgress = useRef(false);
   const listScrollPosition = useRef(0);
 
-  async function refresh(): Promise<void> {
-    try { const data = await listSessions(auth.accessToken); const waiting = data.filter((item) => item.status === "WAITING").length; if (previousWaiting.current && waiting > previousWaiting.current) playNotificationSound(); previousWaiting.current = waiting; setSessions(data); setError(""); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "상담 목록을 불러오지 못했습니다."); }
+  function announce(nextNotice: AgentNotice): void {
+    setNotice(nextNotice);
+    playNotificationSound();
+    showSystemNotification(nextNotice.title, nextNotice.body, nextNotice.id);
   }
-  useEffect(() => { void refresh(); const timer = window.setInterval(() => void refresh(), 5000); return () => window.clearInterval(timer); }, []);
+
+  async function refresh(): Promise<void> {
+    if (refreshInProgress.current) return;
+    refreshInProgress.current = true;
+    try {
+      const data = await listSessions(auth.accessToken);
+      const newWaiting = findNewWaitingSessions(knownWaitingIds.current, data);
+      knownWaitingIds.current = waitingSessionIds(data);
+
+      // 이 Agent에게 배정된 진행 상담은 전역 알림 소켓도 입장해 다른 상담을 보고 있을 때의 고객 메시지를 놓치지 않습니다.
+      const assignedActive = data.filter((item) => item.status === "ACTIVE" && item.agentId === auth.agent.id);
+      activeSessionsRef.current = new Map(assignedActive.map((item) => [item.id, item]));
+      if (notificationSocketRef.current?.connected) {
+        assignedActive.forEach((item) => notificationSocketRef.current?.emit("chat:join", { sessionId: item.id }));
+      }
+
+      setSessions(data);
+      setError("");
+      if (newWaiting.length > 0) {
+        const first = newWaiting[0];
+        const additional = newWaiting.length > 1 ? (language === "ja" ? ` · ほか${newWaiting.length - 1}件` : ` · 외 ${newWaiting.length - 1}건`) : "";
+        announce({
+          id: `waiting-${first.id}-${Date.now()}`,
+          title: t("새 상담이 도착했습니다."),
+          body: `${first.room.hotel.name} · ${first.room.roomNumber}${language === "ja" ? "号室" : "호"}${additional}`,
+          actionLabel: t("대기 상담 보기"),
+        });
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "상담 목록을 불러오지 못했습니다.");
+    } finally {
+      refreshInProgress.current = false;
+    }
+  }
+
+  useEffect(() => {
+    const socket = io(SOCKET_URL, { auth: { staffToken: auth.accessToken }, transports: ["websocket"] });
+    notificationSocketRef.current = socket;
+    const joinAssignedSessions = () => activeSessionsRef.current.forEach((session) => socket.emit("chat:join", { sessionId: session.id }));
+    socket.on("connect", joinAssignedSessions);
+    socket.on("chat:message", (message: MessageView) => {
+      if (message.senderType !== "GUEST") return;
+      const session = activeSessionsRef.current.get(message.sessionId);
+      if (!session) return;
+      announce({
+        id: `message-${message.id}`,
+        title: t("고객 메시지가 도착했습니다."),
+        body: `${session.room.hotel.name} · ${session.room.roomNumber}${language === "ja" ? "号室" : "호"} · ${notificationPreview(message.content)}`,
+      });
+    });
+    return () => { socket.disconnect(); notificationSocketRef.current = null; };
+  }, [auth.accessToken, language, t]);
+
+  useEffect(() => {
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 5000);
+    return () => window.clearInterval(timer);
+  }, [auth.accessToken, auth.agent.id, language, t]);
 
   const waiting = useMemo(() => sessions.filter((item) => item.status === "WAITING"), [sessions]);
   const active = useMemo(() => sessions.filter((item) => item.status === "ACTIVE" && item.agentId === auth.agent.id), [sessions, auth.agent.id]);
   const closed = useMemo(() => sessions.filter((item) => ["CLOSED", "EXPIRED"].includes(item.status) && item.agentId === auth.agent.id), [sessions, auth.agent.id]);
-  if (selected) return <AgentChat auth={auth} initial={selected} onBack={() => {
+
+  function backToList(): void {
     setSelected(null); void refresh();
     // 채팅에서 목록으로 돌아올 때 상담을 열기 전 위치를 복원해 긴 목록의 맨 위로 튀지 않게 합니다.
     window.requestAnimationFrame(() => window.scrollTo({ top: listScrollPosition.current, behavior: "auto" }));
-  }} onChanged={() => void refresh()} />;
+  }
+
+  function showWaitingList(): void {
+    setNotice(null);
+    setSelected(null);
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+  }
+
+  async function enableBrowserNotifications(): Promise<void> {
+    if (!("Notification" in window)) return;
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission === "granted") {
+      setNotice({ id: `permission-${Date.now()}`, title: t("브라우저 알림이 켜졌습니다."), body: t("탭이 백그라운드여도 새 상담과 메시지를 알려드립니다.") });
+    }
+  }
+
+  if (selected) return <><AgentChat auth={auth} initial={selected} onBack={backToList} onChanged={() => void refresh()} />{notice && <AgentNoticePopup notice={notice} onClose={() => setNotice(null)} onAction={showWaitingList} />}</>;
 
   function open(session: SessionView): void { listScrollPosition.current = window.scrollY; setSelected(session); }
   async function accept(session: SessionView): Promise<void> { listScrollPosition.current = window.scrollY; try { setSelected(await acceptSession(auth.accessToken, session.id)); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : "상담 수락에 실패했습니다."); await refresh(); } }
 
-  return <Page auth={auth} title={t("Agent 상담 센터")} subtitle={t("대기 중인 상담을 확인하고 응답합니다.")}><div className="stats"><article><span>{t("대기")}</span><strong>{waiting.length}</strong></article><article><span>{t("내 진행")}</span><strong>{active.length}</strong></article><article><span>{t("내 종료")}</span><strong>{closed.length}</strong></article></div>{error && <div className="error-box">{error}</div>}<section className="card"><div className="section-head"><div><h2>{t("대기 상담")}</h2><p>{t("오래 기다린 상담부터 확인하세요.")}</p></div><button onClick={() => void refresh()}>{t("새로고침")}</button></div><SessionTable items={waiting} action={(session) => <button onClick={() => void accept(session)}>{t("상담 수락")}</button>} /></section><section className="card"><div className="section-head"><div><h2>{t("내 진행 상담")}</h2><p>{t("현재 담당 중인 상담입니다.")}</p></div></div><SessionTable items={active} action={(session) => <button onClick={() => open(session)}>{t("상담 열기")}</button>} /></section><section className="card"><div className="section-head"><div><h2>{t("종료 상담")}</h2><p>{t("최근 종료되거나 만료된 내 상담입니다.")}</p></div></div><SessionTable items={closed.slice(0, 10)} action={(session) => <button onClick={() => open(session)}>{t("기록 보기")}</button>} /></section></Page>;
+  const notificationButtonLabel = notificationPermission === "granted" ? t("브라우저 알림 켜짐") : notificationPermission === "denied" ? t("브라우저 알림 차단됨") : t("브라우저 알림 켜기");
+  return <><Page auth={auth} title={t("Agent 상담 센터")} subtitle={t("대기 중인 상담을 확인하고 응답합니다.")}><div className="stats"><article><span>{t("대기")}</span><strong>{waiting.length}</strong></article><article><span>{t("내 진행")}</span><strong>{active.length}</strong></article><article><span>{t("내 종료")}</span><strong>{closed.length}</strong></article></div>{error && <div className="error-box">{error}</div>}<section className="card"><div className="section-head"><div><h2>{t("대기 상담")}</h2><p>{t("오래 기다린 상담부터 확인하세요.")}</p></div><div className="section-actions">{notificationPermission !== "unsupported" && <button type="button" className="secondary" disabled={notificationPermission !== "default"} onClick={() => void enableBrowserNotifications()}>{notificationButtonLabel}</button>}<button onClick={() => void refresh()}>{t("새로고침")}</button></div></div><SessionTable items={waiting} action={(session) => <button onClick={() => void accept(session)}>{t("상담 수락")}</button>} /></section><section className="card"><div className="section-head"><div><h2>{t("내 진행 상담")}</h2><p>{t("현재 담당 중인 상담입니다.")}</p></div></div><SessionTable items={active} action={(session) => <button onClick={() => open(session)}>{t("상담 열기")}</button>} /></section><section className="card"><div className="section-head"><div><h2>{t("종료 상담")}</h2><p>{t("최근 종료되거나 만료된 내 상담입니다.")}</p></div></div><SessionTable items={closed.slice(0, 10)} action={(session) => <button onClick={() => open(session)}>{t("기록 보기")}</button>} /></section></Page>{notice && <AgentNoticePopup notice={notice} onClose={() => setNotice(null)} onAction={showWaitingList} />}</>;
 }
 
 /** 상담 목록의 공통 열을 한 컴포넌트로 관리해 상태별 표가 서로 달라지지 않게 합니다. */
@@ -122,8 +240,8 @@ function SessionTable({ items, action }: { items: SessionView[]; action: (sessio
   return <div className="table-wrap session-table"><table><thead><tr><th>{t("호텔")}</th><th>{t("객실")}</th><th>{t("언어")}</th><th>{t("상태")}</th><th>{t("만료 시각")}</th><th>{t("작업")}</th></tr></thead><tbody>{items.length === 0 ? <tr className="empty-row"><td colSpan={6} className="empty">{t("표시할 상담이 없습니다.")}</td></tr> : items.map((session) => <tr key={session.id}><td data-label={t("호텔")}>{session.room.hotel.name}</td><td data-label={t("객실")}>{session.room.roomNumber}</td><td data-label={t("언어")}>{session.language.toUpperCase()}</td><td data-label={t("상태")}><span className={`badge ${session.status.toLowerCase()}`}>{session.status}</span></td><td data-label={t("만료 시각")}>{new Date(session.expiresAt).toLocaleTimeString(locale)}</td><td data-label={t("작업")}>{action(session)}</td></tr>)}</tbody></table></div>;
 }
 
-/** 브라우저 정책으로 소리가 차단될 수 있으므로 실패해도 화면 동작은 계속합니다. */
-function playNotificationSound(): void { try { const context = new AudioContext(); const oscillator = context.createOscillator(); oscillator.connect(context.destination); oscillator.frequency.value = 880; oscillator.start(); oscillator.stop(context.currentTime + 0.12); } catch { /* 화면 강조가 기본 알림 수단입니다. */ } }
+/** 브라우저 정책으로 소리가 차단될 수 있으므로 실패해도 화면 동작은 계속하고, 재생 뒤 오디오 자원을 해제합니다. */
+function playNotificationSound(): void { try { const context = new AudioContext(); const oscillator = context.createOscillator(); oscillator.connect(context.destination); oscillator.frequency.value = 880; oscillator.onended = () => void context.close(); oscillator.start(); oscillator.stop(context.currentTime + 0.12); } catch { /* 화면 강조가 기본 알림 수단입니다. */ } }
 
 /** 관리자 전용 로그인은 Agent 토큰과 다른 저장 키를 사용해 역할 화면이 섞이지 않게 합니다. */
 function AdminLogin({ onLogin }: { onLogin: (auth: AgentAuth) => void }): React.JSX.Element { const {t}=useI18n(); const [loginId,setLoginId]=useState("admin"); const [password,setPassword]=useState(""); const [error,setError]=useState(""); async function submit(e:FormEvent){e.preventDefault();try{const value=await loginAdmin(loginId,password);saveStoredAuth(value);onLogin(value);}catch(reason){setError(reason instanceof Error?reason.message:"로그인에 실패했습니다.");}} return <div className="login-shell"><LanguageSwitcher/><form className="login-card" onSubmit={submit}><div className="brand dark">REMOTE<span>+</span></div><h1>{t("관리자 로그인")}</h1><label>{t("로그인 ID")}<input value={loginId} onChange={e=>setLoginId(e.target.value)} autoComplete="username"/></label><label>{t("비밀번호")}<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password"/></label>{error&&<div className="error-box">{error}</div>}<button>{t("로그인")}</button></form></div>; }
