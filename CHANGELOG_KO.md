@@ -1,5 +1,25 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 15:57:15 +09:00
+
+### 수정한 파일
+
+- 로그인 저장 환경설정·브라우저 비밀번호 관리자 연동·테스트: `apps/agent-web/src/login-preferences.ts`, `apps/agent-web/src/login-preferences.test.ts`, `apps/agent-web/src/main.tsx`, `apps/agent-web/src/staff-routing.test.ts`
+- 비밀번호 표시·숨김 UI·테스트: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/password-change.test.ts`
+- README·사양·흐름·UI·설계·매뉴얼·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 로그인 화면에 서로 선택 가능한 `아이디 저장`과 `로그인 정보 저장` 버튼을 추가하고 다시 누르면 선택이 해제되게 했습니다.
+- 앱의 localStorage에는 저장 모드와 ID만 기록하며, 비밀번호 저장은 지원 브라우저의 Credential Management/비밀번호 관리자에 위임해 평문 비밀번호를 앱 저장소에 남기지 않습니다.
+- 비밀번호 변경 모달의 현재·새·확인 입력칸마다 독립적인 눈 아이콘을 추가하고 44px 터치 영역, 키보드 버튼과 스크린 리더용 표시·숨김 이름을 적용했습니다.
+- 기존 직원 JWT는 계속 탭 단위 sessionStorage만 사용하므로 로그인 저장 선택이 인증 수명이나 권한 경계를 바꾸지 않습니다.
+
+### 확인 방법
+
+- 저장 모드 복구·해제·비밀번호 미저장·브라우저 관리자 위임과 세 눈 버튼을 자동 테스트합니다.
+- Agent 웹 테스트·타입 검사·프로덕션 빌드와 전체 회귀 QA를 실행합니다.
+
 ## 2026-07-22 15:35:20 +09:00
 
 ### 수정한 파일

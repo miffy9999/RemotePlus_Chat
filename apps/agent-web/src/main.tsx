@@ -56,6 +56,12 @@ import {
 import { createTitleFlasher, type TitleFlasher } from "./title-flasher";
 import { staffHomePath } from "./staff-routing";
 import { filterConversationLogs } from "./conversation-logs";
+import {
+  readLoginPreference,
+  requestBrowserCredentialSave,
+  saveLoginPreference,
+  type LoginSaveMode,
+} from "./login-preferences";
 import "./styles.css";
 
 /** 한 로그인 폼에서 서버가 판별한 직원 역할에 따라 관리자 또는 Agent 업무 화면으로 이동합니다. */
@@ -65,8 +71,10 @@ function LoginPage({
   onLogin: (auth: AgentAuth) => void;
 }): React.JSX.Element {
   const { t } = useI18n();
-  const [loginId, setLoginId] = useState("");
+  const [initialPreference] = useState(readLoginPreference);
+  const [loginId, setLoginId] = useState(initialPreference.loginId);
   const [password, setPassword] = useState("");
+  const [saveMode, setSaveMode] = useState<LoginSaveMode>(initialPreference.mode);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -80,6 +88,9 @@ function LoginPage({
       // 이전 역할로 로그인했던 탭의 인증을 함께 남기지 않아 보호 경로가 오래된 역할을 선택하는 일을 막습니다.
       clearStoredAuth(auth.agent.role === "ADMIN" ? "AGENT" : "ADMIN");
       saveStoredAuth(auth);
+      saveLoginPreference(saveMode, loginId);
+      // 로그인 정보 저장을 명시적으로 고른 경우에만 브라우저의 안전한 비밀번호 저장소에 위임합니다.
+      if (saveMode === "CREDENTIALS") await requestBrowserCredentialSave(loginId, password);
       onLogin(auth);
       navigate(staffHomePath(auth.agent.role));
     } catch (reason) {
@@ -103,6 +114,8 @@ function LoginPage({
         <label>
           {t("로그인 ID")}
           <input
+            id="staff-login-id"
+            name="username"
             value={loginId}
             onChange={(e) => setLoginId(e.target.value)}
             autoComplete="username"
@@ -111,12 +124,33 @@ function LoginPage({
         <label>
           {t("비밀번호")}
           <input
+            id="staff-login-password"
+            name="password"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
           />
         </label>
+        <div className="login-save-options" role="group" aria-label={t("로그인 정보 저장 방식")}>
+          <button
+            type="button"
+            className={saveMode === "ID" ? "is-active" : ""}
+            aria-pressed={saveMode === "ID"}
+            onClick={() => setSaveMode((current) => current === "ID" ? "NONE" : "ID")}
+          >
+            <span aria-hidden="true">✓</span>{t("아이디 저장")}
+          </button>
+          <button
+            type="button"
+            className={saveMode === "CREDENTIALS" ? "is-active" : ""}
+            aria-pressed={saveMode === "CREDENTIALS"}
+            onClick={() => setSaveMode((current) => current === "CREDENTIALS" ? "NONE" : "CREDENTIALS")}
+          >
+            <span aria-hidden="true">✓</span>{t("로그인 정보 저장")}
+          </button>
+        </div>
+        <small className="login-save-help">{t("로그인 정보 저장은 브라우저 비밀번호 관리자를 사용합니다. 선택한 버튼을 다시 누르면 해제됩니다.")}</small>
         {error && <div className="error-box">{error}</div>}
         <button disabled={loading}>
           {t(loading ? "로그인 중…" : "로그인")}
@@ -997,6 +1031,18 @@ function playNotificationSound(): void {
   }
 }
 
+/** 외부 아이콘 패키지 없이 비밀번호 표시 상태를 전달하는 단순 눈 모양 SVG입니다. */
+function PasswordVisibilityIcon({ hidden }: { hidden: boolean }): React.JSX.Element {
+  return <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" /><circle cx="12" cy="12" r="2.7" />{hidden && <path d="m4 4 16 16" />}</svg>;
+}
+
+/** 각 비밀번호 칸이 자기 표시 상태를 독립적으로 관리해 다른 입력값을 뜻하지 않게 노출하지 않습니다. */
+function PasswordField({ label, autoComplete, value, onChange }: { label: string; autoComplete: string; value: string; onChange: (value: string) => void }): React.JSX.Element {
+  const { t } = useI18n();
+  const [visible, setVisible] = useState(false);
+  return <label>{label}<span className="password-input-wrap"><input type={visible ? "text" : "password"} autoComplete={autoComplete} value={value} onChange={(event) => onChange(event.target.value)} required /><button type="button" className="password-visibility" aria-label={t(visible ? "비밀번호 숨기기" : "비밀번호 보기")} title={t(visible ? "비밀번호 숨기기" : "비밀번호 보기")} aria-pressed={visible} onClick={() => setVisible((current) => !current)}><PasswordVisibilityIcon hidden={visible} /></button></span></label>;
+}
+
 /** 현재 비밀번호를 다시 확인한 뒤 새 비밀번호로 바꾸고, 성공하면 폐기된 토큰을 남기지 않도록 재로그인시킵니다. */
 function PasswordChangeModal({ auth, onClose }: { auth: AgentAuth; onClose: () => void }): React.JSX.Element {
   const { t } = useI18n();
@@ -1020,7 +1066,7 @@ function PasswordChangeModal({ auth, onClose }: { auth: AgentAuth; onClose: () =
     } finally { setLoading(false); }
   }
 
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !loading) onClose(); }}><section className="confirm-modal password-modal" role="dialog" aria-modal="true" aria-labelledby="password-title"><h2 id="password-title">{t("비밀번호 변경")}</h2><p>{t("변경하면 이 계정으로 로그인한 모든 기기에서 다시 로그인해야 합니다.")}</p><form className="password-form" onSubmit={submit}><label>{t("현재 비밀번호")}<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required /></label><label>{t("새 비밀번호")}<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required /></label><label>{t("새 비밀번호 확인")}<input type="password" autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required /></label>{error && <div className="error-box" role="alert">{error}</div>}<div><button type="button" className="secondary" disabled={loading} onClick={onClose}>{t("취소")}</button><button disabled={loading}>{t(loading ? "변경 중…" : "비밀번호 변경")}</button></div></form></section></div>;
+  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !loading) onClose(); }}><section className="confirm-modal password-modal" role="dialog" aria-modal="true" aria-labelledby="password-title"><h2 id="password-title">{t("비밀번호 변경")}</h2><p>{t("변경하면 이 계정으로 로그인한 모든 기기에서 다시 로그인해야 합니다.")}</p><form className="password-form" onSubmit={submit}><PasswordField label={t("현재 비밀번호")} autoComplete="current-password" value={currentPassword} onChange={setCurrentPassword} /><PasswordField label={t("새 비밀번호")} autoComplete="new-password" value={newPassword} onChange={setNewPassword} /><PasswordField label={t("새 비밀번호 확인")} autoComplete="new-password" value={confirmation} onChange={setConfirmation} />{error && <div className="error-box" role="alert">{error}</div>}<div><button type="button" className="secondary" disabled={loading} onClick={onClose}>{t("취소")}</button><button disabled={loading}>{t(loading ? "변경 중…" : "비밀번호 변경")}</button></div></form></section></div>;
 }
 
 /** 관리자만 받은 투숙객 주소를 클립보드에 복사합니다. 실패하면 호출부가 화면 오류로 안내합니다. */
