@@ -47,6 +47,7 @@ table { width: 100%; border-collapse: collapse; } th, td { padding: 15px 12px; t
 .badge { display: inline-flex; border-radius: 999px; padding: 6px 10px; font-size: 11px; font-weight: 800; }.badge.waiting { color: #8b651e; background: #fff5db; }.badge.active { color: #16835b; background: #e6f8f0; }.badge.closed, .badge.expired { color: #687083; background: #eef0f4; }
 .empty { padding: 34px 16px !important; color: #8992a3; text-align: center; }
 .error-box { margin: 0 0 16px; padding: 12px 14px; color: #a84239; background: #fff0ee; border: 1px solid #f7d7d3; border-radius: 10px; font-size: 13px; }
+.form-error { margin: 14px 0 -4px; }
 
 /* Agent 채팅은 투숙객 채팅과 동일한 말풍선·입력창·연결 표시를 사용하되 넓은 업무 화면에 맞춥니다. */
 .chat-card { position: relative; height: calc(100vh - 145px); min-height: 560px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; background: white; border: 1px solid #e2e7f0; border-radius: 18px; box-shadow: 0 16px 38px rgba(33,48,79,.1); }
