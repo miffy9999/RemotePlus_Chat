@@ -56,7 +56,7 @@ async function seed(): Promise<void> {
   const secondAccessKey = seedSecret("SEED_SECOND_ROOM_ACCESS_KEY", "demo-room-access-1202");
   await prisma.roomAccessKey.upsert({ where: { keyHash: sha256(secondAccessKey) }, update: { status: "ACTIVE", encryptedKey: encryptSecret(secondAccessKey) }, create: { roomId: secondRoom.id, keyHash: sha256(secondAccessKey), encryptedKey: encryptSecret(secondAccessKey) } });
 
-  // 명시적으로 테스트 모드를 켠 배포에서만 짧은 공용 비밀번호와 기존 계정 재설정을 허용합니다.
+  // 새 DB에는 테스트 기본 계정을 만들되 기본 설정에서는 기존 비밀번호를 덮어쓰지 않아 사용자의 변경값을 보존합니다.
   const resetExistingPasswords = process.env.SEED_RESET_EXISTING_PASSWORDS === "true";
   const adminPassword = await hash(seedPassword("SEED_ADMIN_PASSWORD", "admin"), 12);
   const agentPassword = await hash(seedPassword("SEED_AGENT_PASSWORD", "agent01"), 12);

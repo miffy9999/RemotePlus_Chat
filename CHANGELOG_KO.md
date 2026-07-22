@@ -1,5 +1,31 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 14:35:10 +09:00
+
+### 수정한 파일
+
+- 로그인 ID 기본값과 회귀 테스트: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/staff-routing.test.ts`
+- 본인 비밀번호 변경 UI·API: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/api.ts`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/styles.css`, `apps/server/src/modules/auth/auth.controller.ts`, `apps/server/src/modules/auth/auth.service.ts`, `apps/server/src/modules/auth/auth.types.ts`, `apps/server/src/modules/auth/dto/change-password.dto.ts`
+- 토큰 버전·변경값 유지: `apps/server/prisma/schema.prisma`, `apps/server/prisma/migrations/20260722050000_add_agent_token_version/migration.sql`, `apps/server/prisma/seed.ts`, `.env.example`, `compose.yaml`, `render.yaml`
+- 비밀번호 회귀 테스트: `apps/server/tests/auth-service.spec.ts`, `apps/agent-web/src/password-change.test.ts`
+- 상담 기록 30일 정리·테스트·인덱스: `apps/server/src/modules/chat-sessions/chat-sessions.service.ts`, `apps/server/tests/chat-retention.spec.ts`, `apps/server/prisma/schema.prisma`, `apps/server/prisma/migrations/20260722051000_add_chat_retention_index/migration.sql`
+- 사양·흐름·DB·API·UI·설계·결정·매뉴얼·배포·출시 점검·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/04_Database_Design.md`, `docs/05_API_Specification.yaml`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`, `docs/12_Free_Deployment_Guide.md`, `docs/13_Commercial_Release_Checklist_KO.md`
+
+### 수정 내용과 이유
+
+- 공통 직원 로그인 화면이 특정 테스트 계정 `agent01`을 기본 ID로 노출하지 않도록 입력란 초기값을 빈 문자열로 변경했습니다.
+- 표준 `username` 자동완성 속성은 유지해 사용자가 브라우저에 직접 저장한 계정은 계속 편리하게 선택할 수 있습니다.
+- 기본 테스트 비밀번호 `admin`, `agent01`은 유지하면서 관리자와 Agent가 상단 모달에서 현재 비밀번호를 확인받고 자기 비밀번호를 변경할 수 있게 합니다.
+- 변경 시 계정 토큰 버전을 증가시켜 다른 PC를 포함한 기존 무기한 JWT를 모두 폐기하고 현재 탭도 공통 로그인 화면으로 이동합니다.
+- Docker·Render 시작 때 기본값으로 반복 재설정하던 동작을 제거하고 시드가 새 계정 생성에만 기본값을 사용하게 해 변경한 비밀번호를 재배포 후에도 유지합니다.
+- 비밀번호 길이·문자 조합 제한은 추가하지 않으며 Chrome 경고 자체를 HTML로 숨기지 않습니다. 기본 비밀번호를 계속 사용하면 Chrome 경고도 계속 표시될 수 있습니다.
+- `closedAt` 기준 30일이 지난 종료·만료·취소·차단 상담을 메시지와 함께 자동 삭제합니다. 대기·진행 상담은 제외하고 서버 시작 후 1회와 24시간마다 1회만 실행해 무료 DB 부하를 제한합니다.
+
+### 확인 방법
+
+- 로그인 ID 빈 초기값, 현재·빈 비밀번호 검증, bcrypt 변경, 토큰 버전 폐기, UI 입력 확인과 30일 보존 조건을 회귀 테스트로 확인했습니다.
+- 서버 테스트 38개와 Agent 웹 테스트 35개, 두 패키지 타입 검사·프로덕션 빌드와 `git diff --check`가 통과했습니다.
+
 ## 2026-07-22 14:26:14 +09:00
 
 ### 수정한 파일

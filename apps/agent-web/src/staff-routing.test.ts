@@ -21,4 +21,10 @@ describe("직원 역할별 로그인 이동", () => {
     expect(mainSource).not.toContain("function AdminLogin");
     expect(mainSource).toContain("loginStaff(loginId, password)");
   });
+
+  /** 특정 테스트 Agent ID가 공용 로그인 화면에 자동 노출되는 회귀를 막습니다. */
+  it("로그인 ID를 빈 값으로 시작한다", () => {
+    expect(mainSource).toContain('const [loginId, setLoginId] = useState("");');
+    expect(mainSource).not.toContain('useState("agent01")');
+  });
 });

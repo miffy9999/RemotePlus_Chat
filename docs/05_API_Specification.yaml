@@ -18,6 +18,15 @@ paths:
       responses:
         "201": { description: 직원 JWT와 ADMIN 또는 AGENT 역할 발급 }
         "401": { description: 로그인 실패 }
+  /auth/change-password:
+    post:
+      summary: 로그인한 직원의 비밀번호 변경과 기존 토큰 폐기
+      security: [{ bearerAuth: [] }]
+      requestBody: { $ref: "#/components/requestBodies/ChangePassword" }
+      responses:
+        "201": { description: 변경 성공, 재로그인 필요 }
+        "400": { description: 현재 비밀번호 오류 또는 새 비밀번호가 기존과 같음 }
+        "401": { description: 직원 인증 실패 }
   /auth/agent/login:
     post:
       deprecated: true
@@ -111,6 +120,16 @@ components:
       required: true
       schema: { type: string, format: uuid }
   requestBodies:
+    ChangePassword:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [currentPassword, newPassword]
+            properties:
+              currentPassword: { type: string, format: password }
+              newPassword: { type: string, format: password }
     Login:
       required: true
       content:

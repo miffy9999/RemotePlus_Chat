@@ -67,6 +67,15 @@ export async function loginStaff(loginId: string, password: string): Promise<Age
   }
 }
 
+/** 현재 직원 JWT와 기존 비밀번호를 확인해 새 비밀번호로 바꾸고 서버의 기존 토큰 버전을 폐기합니다. */
+export function changeStaffPassword(token: string, currentPassword: string, newPassword: string) {
+  return request<{ changed: true }>("/auth/change-password", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    body: JSON.stringify({ currentPassword, newPassword })
+  });
+}
+
 /** 상태 필터 없이 전체 목록을 받아 화면에서 역할과 탭에 맞게 나눕니다. */
 export function listSessions(token: string) {
   return request<SessionView[]>("/agent/chat-sessions", { headers: { authorization: `Bearer ${token}` } });

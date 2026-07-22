@@ -7,17 +7,30 @@ import { Prisma, type ChatSessionStatus } from "@prisma/client";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 
 const SESSION_DURATION_MS = 15 * 60 * 1000;
+const CHAT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /** 상담 생성부터 조회·수락·종료까지 상태 전환을 트랜잭션 단위로 관리합니다. */
 @Injectable()
 export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ChatSessionsService.name);
   private expirationTimer?: NodeJS.Timeout;
+  private retentionTimer?: NodeJS.Timeout;
   constructor(private readonly prisma: PrismaService, private readonly events: EventEmitter2) {}
 
-  /** 서버 시작 즉시 누락된 만료를 복구하고 이후 5초마다 DB 기준 만료 대상을 처리한다. */
-  onModuleInit(): void { void this.expireDueSessions(); this.expirationTimer = setInterval(() => void this.expireDueSessions(), 5_000); }
-  onModuleDestroy(): void { if (this.expirationTimer) clearInterval(this.expirationTimer); }
+  /** 서버 시작 즉시 누락 만료와 오래된 기록을 정리하고, 각각 필요한 최소 주기로만 반복합니다. */
+  onModuleInit(): void {
+    void this.expireDueSessions();
+    void this.deleteExpiredHistory().catch((reason) => this.logger.error(JSON.stringify({ event: "retention.failed", reason: reason instanceof Error ? reason.message : String(reason) })));
+    this.expirationTimer = setInterval(() => void this.expireDueSessions(), 5_000);
+    // 무료 DB에 요청마다 삭제 쿼리를 추가하지 않고 하루 한 번만 보존 기한을 확인합니다.
+    this.retentionTimer = setInterval(() => void this.deleteExpiredHistory().catch((reason) => this.logger.error(JSON.stringify({ event: "retention.failed", reason: reason instanceof Error ? reason.message : String(reason) }))), RETENTION_INTERVAL_MS);
+  }
+
+  onModuleDestroy(): void {
+    if (this.expirationTimer) clearInterval(this.expirationTimer);
+    if (this.retentionTimer) clearInterval(this.retentionTimer);
+  }
 
   /**
    * 같은 객실에 쓰기 가능한 상담이 있으면 새 상담을 만들지 않습니다.
@@ -130,6 +143,19 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
       const result = await this.prisma.chatSession.updateMany({ where: { id: item.id, status: { in: ["WAITING", "ACTIVE"] } }, data: { status: "EXPIRED", closedAt: now, closeReason: "TIME_LIMIT" } });
       if (result.count === 1) { const session = await this.findOrThrow(item.id); const safe = this.toPublic(session); this.events.emit("chat.session.closed", safe); this.logger.log(JSON.stringify({ event: "session.expired", sessionId: item.id, reason: "TIME_LIMIT" })); }
     }
+  }
+
+  /**
+   * 종료 시각이 30일 지난 쓰기 불가 상담만 삭제합니다.
+   * ChatSession의 연쇄 삭제 제약이 하위 Message를 함께 지우며 WAITING·ACTIVE와 closedAt 없는 행은 대상에서 제외합니다.
+   */
+  async deleteExpiredHistory(now: Date = new Date()): Promise<number> {
+    const cutoff = new Date(now.getTime() - CHAT_RETENTION_MS);
+    const deleted = await this.prisma.chatSession.deleteMany({
+      where: { status: { in: ["CLOSED", "EXPIRED", "CANCELLED", "BLOCKED"] }, closedAt: { lte: cutoff } }
+    });
+    if (deleted.count > 0) this.logger.log(JSON.stringify({ event: "retention.deleted", count: deleted.count, cutoff: cutoff.toISOString() }));
+    return deleted.count;
   }
 
   private assertCanRead(session: { guestTokenHash: string; agentId: string | null }, staff: StaffTokenPayload | null, guestToken?: string): void {

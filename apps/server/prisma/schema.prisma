@@ -78,6 +78,7 @@ model Agent {
   name         String
   loginId      String       @unique
   passwordHash String
+  tokenVersion Int          @default(0)
   role         StaffRole    @default(AGENT)
   status       RecordStatus @default(ACTIVE)
   createdAt    DateTime     @default(now())
@@ -101,6 +102,7 @@ model ChatSession {
   agent       Agent?            @relation(fields: [agentId], references: [id], onDelete: SetNull)
   messages    Message[]
   @@index([status, createdAt])
+  @@index([status, closedAt])
   @@index([lastActivityAt])
   @@index([roomId, status])
 }
