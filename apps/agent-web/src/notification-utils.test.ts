@@ -50,8 +50,14 @@ describe("상담 알림 판정", () => {
   });
 
   it("마지막 메시지 시각이 최신인 상담을 목록 맨 위로 정렬한다", () => {
-    const older = { id: "older", lastActivityAt: "2026-07-22T03:00:00.000Z" };
-    const newer = { id: "newer", lastActivityAt: "2026-07-22T03:01:00.000Z" };
+    const older = { id: "older", createdAt: "2026-07-22T02:00:00.000Z", lastActivityAt: "2026-07-22T03:00:00.000Z" };
+    const newer = { id: "newer", createdAt: "2026-07-22T02:01:00.000Z", lastActivityAt: "2026-07-22T03:01:00.000Z" };
+    expect(sortSessionsByRecentActivity([older, newer]).map((session) => session.id)).toEqual(["newer", "older"]);
+  });
+
+  it("Render 구버전 API와 겹치는 배포 구간에는 생성 시각으로 목록을 정렬한다", () => {
+    const older = { id: "older", createdAt: "2026-07-22T02:00:00.000Z" };
+    const newer = { id: "newer", createdAt: "2026-07-22T02:01:00.000Z" };
     expect(sortSessionsByRecentActivity([older, newer]).map((session) => session.id)).toEqual(["newer", "older"]);
   });
 });

@@ -5,7 +5,8 @@ interface NotifiableSession {
 }
 
 interface ActivitySession {
-  lastActivityAt: string;
+  createdAt: string;
+  lastActivityAt?: string;
 }
 
 const NOTIFICATION_SOUND_KEY = "remoteplus-agent-notification-sound";
@@ -24,7 +25,8 @@ export function saveNotificationSoundEnabled(enabled: boolean, storage: Storage 
 
 /** 최근 메시지 시각이 큰 상담부터 복사 정렬해 React 원본 상태를 변경하지 않고 메신저형 목록을 만듭니다. */
 export function sortSessionsByRecentActivity<T extends ActivitySession>(sessions: readonly T[]): T[] {
-  return [...sessions].sort((left, right) => right.lastActivityAt.localeCompare(left.lastActivityAt));
+  // 무료 플랜의 순차 배포 중 구버전 API가 lastActivityAt을 아직 주지 않는 짧은 구간에는 생성 시각으로 안전하게 대체합니다.
+  return [...sessions].sort((left, right) => (right.lastActivityAt ?? right.createdAt).localeCompare(left.lastActivityAt ?? left.createdAt));
 }
 
 /** 현재 대기 중인 상담 ID를 저장해 다음 폴링 결과와 정확하게 비교합니다. */

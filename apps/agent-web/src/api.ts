@@ -12,7 +12,7 @@ export interface SessionView {
   expiresAt: string;
   closedAt: string | null;
   createdAt: string;
-  lastActivityAt: string;
+  lastActivityAt?: string;
   room: { roomNumber: string; hotel: { name: string } };
 }
 
