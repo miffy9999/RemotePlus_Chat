@@ -1,5 +1,25 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 13:02:09 +09:00
+
+### 수정한 파일
+
+- 고객 동일 기기 복구: `apps/guest-web/src/api.ts`, `apps/guest-web/src/guest-access-storage.ts`, `apps/guest-web/src/guest-access-storage.test.ts`, `apps/guest-web/src/main.tsx`
+- 사양·흐름·설계·결정·매뉴얼·출시 점검·기능 현황: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/08_System_Blueprint.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`, `docs/13_Commercial_Release_Checklist_KO.md`
+
+### 수정 내용과 이유
+
+- 게스트 상담의 세션 ID·불투명 토큰·만료 시각 저장 기본값을 탭 단위 `sessionStorage`에서 접근 키별 `localStorage`로 변경했습니다.
+- 같은 기기에서 탭을 닫고 QR을 다시 읽으면 저장 상담을 `GET /chat-sessions/:id`로 재검증하고 `WAITING` 또는 `ACTIVE` 상태일 때 기존 채팅으로 바로 복귀합니다.
+- 손상된 값, 브라우저 시각상 만료, 서버 `CLOSED`·`EXPIRED`, 401·403·404 응답에서는 해당 객실 복구 정보만 삭제하고 신규 상담 화면으로 이동합니다.
+- 일시적인 네트워크·서버 장애에는 저장 토큰을 유지해 장애 복구 후 다시 시도할 수 있게 했습니다.
+- 상담 중 종료 이벤트 또는 브라우저 만료 시각이 도달해도 복구 정보를 즉시 정리합니다.
+
+### 확인 방법
+
+- 저장·복원, 손상값, 필수 필드, 만료, 종료 상태, 객실별 격리를 Guest 웹 단위 테스트로 확인합니다.
+- Guest 웹 테스트·린트·프로덕션 빌드와 전체 워크스페이스 검증을 실행합니다.
+
 ## 2026-07-22 13:01:51 +09:00
 
 ### 수정한 파일
