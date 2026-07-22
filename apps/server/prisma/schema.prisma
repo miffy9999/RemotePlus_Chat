@@ -96,10 +96,12 @@ model ChatSession {
   closedAt    DateTime?
   closeReason String?
   createdAt   DateTime          @default(now())
+  lastActivityAt DateTime       @default(now())
   room        Room              @relation(fields: [roomId], references: [id], onDelete: Cascade)
   agent       Agent?            @relation(fields: [agentId], references: [id], onDelete: SetNull)
   messages    Message[]
   @@index([status, createdAt])
+  @@index([lastActivityAt])
   @@index([roomId, status])
 }
 

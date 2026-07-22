@@ -53,10 +53,10 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     return this.toPublic(session);
   }
 
-  /** Agent 목록은 민감한 토큰 해시를 제외하고 최신 상담부터 반환합니다. */
+  /** Agent 목록은 별도 메시지 집계 없이 인덱스가 있는 최근 활동 시각으로 정렬해 무료 DB 부하를 제한합니다. */
   async list(status?: ChatSessionStatus) {
     await this.expireDueSessions();
-    const sessions = await this.prisma.chatSession.findMany({ where: status ? { status } : undefined, include: { room: { include: { hotel: true } }, agent: true }, orderBy: { createdAt: "desc" } });
+    const sessions = await this.prisma.chatSession.findMany({ where: status ? { status } : undefined, include: { room: { include: { hotel: true } }, agent: true }, orderBy: [{ lastActivityAt: "desc" }, { createdAt: "desc" }] });
     return sessions.map((session) => this.toPublic(session));
   }
 

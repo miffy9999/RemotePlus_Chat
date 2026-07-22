@@ -7,7 +7,8 @@ import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
 import { LanguageProvider, LanguageSwitcher, useI18n } from "./i18n";
 import { AUTH_INVALID_EVENT, clearStoredAuth, readStoredAuth, saveStoredAuth, type AgentAuth } from "./auth-storage";
 import { createRoomQrDataUrl, createRoomQrFileName, downloadRoomQr } from "./qr-code";
-import { findNewWaitingSessions, notificationPreview, waitingSessionIds } from "./notification-utils";
+import { findNewWaitingSessions, notificationPreview, readNotificationSoundEnabled, saveNotificationSoundEnabled, sortSessionsByRecentActivity, waitingSessionIds } from "./notification-utils";
+import { createTitleFlasher, type TitleFlasher } from "./title-flasher";
 import "./styles.css";
 
 /** 기본 진입 화면에서 사용자가 자신의 역할을 먼저 선택해 관리자와 Agent 인증 흐름을 명확히 구분합니다. */
@@ -112,11 +113,12 @@ function AgentNoticePopup({ notice, onClose, onAction }: { notice: AgentNotice; 
     return () => window.clearTimeout(timer);
   }, [notice.id]);
 
-  return <aside className="agent-notice" role="alert" aria-live="assertive">
+  // 사이드바에 사용하는 aside 태그와 분리해 모바일에서 사이드바 숨김 CSS가 팝업까지 감추지 않게 합니다.
+  return <section className="agent-notice" role="alert" aria-live="assertive">
     <div className="agent-notice-heading"><strong>{notice.title}</strong><button type="button" className="link-button" aria-label={t("알림 닫기")} onClick={onClose}>×</button></div>
     <p>{notice.body}</p>
     {notice.actionLabel && <button type="button" className="agent-notice-action" onClick={onAction}>{notice.actionLabel}</button>}
-  </aside>;
+  </section>;
 }
 
 /** 상담 목록은 폴링으로 새 대기 상담을 찾고 Socket.IO로 담당 상담의 고객 메시지를 즉시 알립니다. */
@@ -126,18 +128,41 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const [selected, setSelected] = useState<SessionView | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<AgentNotice | null>(null);
+  const [soundEnabled, setSoundEnabled] = useState(() => readNotificationSoundEnabled());
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "unsupported">(
     () => typeof Notification === "undefined" ? "unsupported" : Notification.permission,
   );
   const knownWaitingIds = useRef<Set<string> | null>(null);
   const activeSessionsRef = useRef<Map<string, SessionView>>(new Map());
   const notificationSocketRef = useRef<Socket | null>(null);
+  const soundEnabledRef = useRef(soundEnabled);
+  const titleFlasherRef = useRef<TitleFlasher | null>(null);
   const refreshInProgress = useRef(false);
   const listScrollPosition = useRef(0);
 
+  useEffect(() => {
+    const flasher = createTitleFlasher(document, {
+      setInterval: (handler, milliseconds) => window.setInterval(handler, milliseconds),
+      clearInterval: (id) => window.clearInterval(id),
+    });
+    titleFlasherRef.current = flasher;
+    // 탭을 다시 보거나 브라우저 창으로 돌아오면 새 채팅을 확인한 것으로 보고 제목을 즉시 복구합니다.
+    const stopWhenVisible = () => { if (document.visibilityState === "visible") flasher.stop(); };
+    const stopWhenFocused = () => flasher.stop();
+    document.addEventListener("visibilitychange", stopWhenVisible);
+    window.addEventListener("focus", stopWhenFocused);
+    return () => {
+      document.removeEventListener("visibilitychange", stopWhenVisible);
+      window.removeEventListener("focus", stopWhenFocused);
+      flasher.stop();
+      titleFlasherRef.current = null;
+    };
+  }, []);
+
   function announce(nextNotice: AgentNotice): void {
     setNotice(nextNotice);
-    playNotificationSound();
+    if (soundEnabledRef.current) playNotificationSound();
+    titleFlasherRef.current?.start(nextNotice.title);
     showSystemNotification(nextNotice.title, nextNotice.body, nextNotice.id);
   }
 
@@ -184,6 +209,8 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       if (message.senderType !== "GUEST") return;
       const session = activeSessionsRef.current.get(message.sessionId);
       if (!session) return;
+      // REST 폴링을 기다리지 않고 수신 즉시 최근 활동 시각을 갱신해 새 메시지 상담을 목록 맨 위로 이동합니다.
+      setSessions((items) => items.map((item) => item.id === message.sessionId ? { ...item, lastActivityAt: message.createdAt } : item));
       announce({
         id: `message-${message.id}`,
         title: t("고객 메시지가 도착했습니다."),
@@ -200,7 +227,7 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   }, [auth.accessToken, auth.agent.id, language, t]);
 
   const waiting = useMemo(() => sessions.filter((item) => item.status === "WAITING"), [sessions]);
-  const active = useMemo(() => sessions.filter((item) => item.status === "ACTIVE" && item.agentId === auth.agent.id), [sessions, auth.agent.id]);
+  const active = useMemo(() => sortSessionsByRecentActivity(sessions.filter((item) => item.status === "ACTIVE" && item.agentId === auth.agent.id)), [sessions, auth.agent.id]);
   const closed = useMemo(() => sessions.filter((item) => ["CLOSED", "EXPIRED"].includes(item.status) && item.agentId === auth.agent.id), [sessions, auth.agent.id]);
 
   function backToList(): void {
@@ -224,13 +251,23 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     }
   }
 
+  /** 알림음은 기본으로 끄고, 상담원이 직접 켠 경우에만 이후 상담·메시지 알림에서 재생합니다. */
+  function toggleNotificationSound(): void {
+    const enabled = !soundEnabledRef.current;
+    soundEnabledRef.current = enabled;
+    setSoundEnabled(enabled);
+    saveNotificationSoundEnabled(enabled);
+    // 켜기 버튼을 누른 사용자 동작 안에서 시험음을 재생해 브라우저 자동재생 정책을 만족하고 설정 결과를 확인시킵니다.
+    if (enabled) playNotificationSound();
+  }
+
   if (selected) return <><AgentChat auth={auth} initial={selected} onBack={backToList} onChanged={() => void refresh()} />{notice && <AgentNoticePopup notice={notice} onClose={() => setNotice(null)} onAction={showWaitingList} />}</>;
 
   function open(session: SessionView): void { listScrollPosition.current = window.scrollY; setSelected(session); }
   async function accept(session: SessionView): Promise<void> { listScrollPosition.current = window.scrollY; try { setSelected(await acceptSession(auth.accessToken, session.id)); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : "상담 수락에 실패했습니다."); await refresh(); } }
 
   const notificationButtonLabel = notificationPermission === "granted" ? t("브라우저 알림 켜짐") : notificationPermission === "denied" ? t("브라우저 알림 차단됨") : t("브라우저 알림 켜기");
-  return <><Page auth={auth} title={t("Agent 상담 센터")} subtitle={t("대기 중인 상담을 확인하고 응답합니다.")}><div className="stats"><article><span>{t("대기")}</span><strong>{waiting.length}</strong></article><article><span>{t("내 진행")}</span><strong>{active.length}</strong></article><article><span>{t("내 종료")}</span><strong>{closed.length}</strong></article></div>{error && <div className="error-box">{error}</div>}<section className="card"><div className="section-head"><div><h2>{t("대기 상담")}</h2><p>{t("오래 기다린 상담부터 확인하세요.")}</p></div><div className="section-actions">{notificationPermission !== "unsupported" && <button type="button" className="secondary" disabled={notificationPermission !== "default"} onClick={() => void enableBrowserNotifications()}>{notificationButtonLabel}</button>}<button onClick={() => void refresh()}>{t("새로고침")}</button></div></div><SessionTable items={waiting} action={(session) => <button onClick={() => void accept(session)}>{t("상담 수락")}</button>} /></section><section className="card"><div className="section-head"><div><h2>{t("내 진행 상담")}</h2><p>{t("현재 담당 중인 상담입니다.")}</p></div></div><SessionTable items={active} action={(session) => <button onClick={() => open(session)}>{t("상담 열기")}</button>} /></section><section className="card"><div className="section-head"><div><h2>{t("종료 상담")}</h2><p>{t("최근 종료되거나 만료된 내 상담입니다.")}</p></div></div><SessionTable items={closed.slice(0, 10)} action={(session) => <button onClick={() => open(session)}>{t("기록 보기")}</button>} /></section></Page>{notice && <AgentNoticePopup notice={notice} onClose={() => setNotice(null)} onAction={showWaitingList} />}</>;
+  return <><Page auth={auth} title={t("Agent 상담 센터")} subtitle={t("대기 중인 상담을 확인하고 응답합니다.")}><div className="stats"><article><span>{t("대기")}</span><strong>{waiting.length}</strong></article><article><span>{t("내 진행")}</span><strong>{active.length}</strong></article><article><span>{t("내 종료")}</span><strong>{closed.length}</strong></article></div>{error && <div className="error-box">{error}</div>}<section className="card"><div className="section-head"><div><h2>{t("대기 상담")}</h2><p>{t("오래 기다린 상담부터 확인하세요.")}</p></div><div className="section-actions"><button type="button" className="secondary" aria-pressed={soundEnabled} onClick={toggleNotificationSound}>{t(soundEnabled ? "알림음 끄기" : "알림음 켜기")}</button>{notificationPermission !== "unsupported" && <button type="button" className="secondary" disabled={notificationPermission !== "default"} onClick={() => void enableBrowserNotifications()}>{notificationButtonLabel}</button>}<button onClick={() => void refresh()}>{t("새로고침")}</button></div></div><SessionTable items={waiting} action={(session) => <button onClick={() => void accept(session)}>{t("상담 수락")}</button>} /></section><section className="card"><div className="section-head"><div><h2>{t("내 진행 상담")}</h2><p>{t("현재 담당 중인 상담입니다.")}</p></div></div><SessionTable items={active} action={(session) => <button onClick={() => open(session)}>{t("상담 열기")}</button>} /></section><section className="card"><div className="section-head"><div><h2>{t("종료 상담")}</h2><p>{t("최근 종료되거나 만료된 내 상담입니다.")}</p></div></div><SessionTable items={closed.slice(0, 10)} action={(session) => <button onClick={() => open(session)}>{t("기록 보기")}</button>} /></section></Page>{notice && <AgentNoticePopup notice={notice} onClose={() => setNotice(null)} onAction={showWaitingList} />}</>;
 }
 
 /** 상담 목록의 공통 열을 한 컴포넌트로 관리해 상태별 표가 서로 달라지지 않게 합니다. */
@@ -240,8 +277,8 @@ function SessionTable({ items, action }: { items: SessionView[]; action: (sessio
   return <div className="table-wrap session-table"><table><thead><tr><th>{t("호텔")}</th><th>{t("객실")}</th><th>{t("언어")}</th><th>{t("상태")}</th><th>{t("만료 시각")}</th><th>{t("작업")}</th></tr></thead><tbody>{items.length === 0 ? <tr className="empty-row"><td colSpan={6} className="empty">{t("표시할 상담이 없습니다.")}</td></tr> : items.map((session) => <tr key={session.id}><td data-label={t("호텔")}>{session.room.hotel.name}</td><td data-label={t("객실")}>{session.room.roomNumber}</td><td data-label={t("언어")}>{session.language.toUpperCase()}</td><td data-label={t("상태")}><span className={`badge ${session.status.toLowerCase()}`}>{session.status}</span></td><td data-label={t("만료 시각")}>{new Date(session.expiresAt).toLocaleTimeString(locale)}</td><td data-label={t("작업")}>{action(session)}</td></tr>)}</tbody></table></div>;
 }
 
-/** 브라우저 정책으로 소리가 차단될 수 있으므로 실패해도 화면 동작은 계속하고, 재생 뒤 오디오 자원을 해제합니다. */
-function playNotificationSound(): void { try { const context = new AudioContext(); const oscillator = context.createOscillator(); oscillator.connect(context.destination); oscillator.frequency.value = 880; oscillator.onended = () => void context.close(); oscillator.start(); oscillator.stop(context.currentTime + 0.12); } catch { /* 화면 강조가 기본 알림 수단입니다. */ } }
+/** 사용자가 알림음을 켠 경우에만 짧은 시험·수신음을 재생하고 완료 뒤 오디오 자원을 해제합니다. */
+function playNotificationSound(): void { try { const context = new AudioContext(); const oscillator = context.createOscillator(); oscillator.connect(context.destination); oscillator.frequency.value = 880; oscillator.onended = () => void context.close(); oscillator.start(); oscillator.stop(context.currentTime + 0.12); } catch { /* 소리가 차단되어도 화면 팝업은 항상 유지됩니다. */ } }
 
 /** 관리자 전용 로그인은 Agent 토큰과 다른 저장 키를 사용해 역할 화면이 섞이지 않게 합니다. */
 function AdminLogin({ onLogin }: { onLogin: (auth: AgentAuth) => void }): React.JSX.Element { const {t}=useI18n(); const [loginId,setLoginId]=useState("admin"); const [password,setPassword]=useState(""); const [error,setError]=useState(""); async function submit(e:FormEvent){e.preventDefault();try{const value=await loginAdmin(loginId,password);saveStoredAuth(value);onLogin(value);}catch(reason){setError(reason instanceof Error?reason.message:"로그인에 실패했습니다.");}} return <div className="login-shell"><LanguageSwitcher/><form className="login-card" onSubmit={submit}><div className="brand dark">REMOTE<span>+</span></div><h1>{t("관리자 로그인")}</h1><label>{t("로그인 ID")}<input value={loginId} onChange={e=>setLoginId(e.target.value)} autoComplete="username"/></label><label>{t("비밀번호")}<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password"/></label>{error&&<div className="error-box">{error}</div>}<button>{t("로그인")}</button></form></div>; }

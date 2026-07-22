@@ -1,5 +1,32 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 13:01:51 +09:00
+
+### 수정한 파일
+
+- Agent 팝업·알림음·탭 제목·최근 상담 정렬: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/api.ts`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/notification-utils.ts`, `apps/agent-web/src/title-flasher.ts`
+- Agent 알림 회귀 테스트: `apps/agent-web/src/popup-style.test.ts`, `apps/agent-web/src/notification-utils.test.ts`, `apps/agent-web/src/title-flasher.test.ts`
+- 최근 활동 DB 컬럼·마이그레이션·서버 정렬: `apps/server/prisma/schema.prisma`, `apps/server/prisma/migrations/20260722040000_add_chat_session_last_activity/migration.sql`, `apps/server/src/modules/chat-sessions/chat-sessions.service.ts`, `apps/server/src/modules/messages/messages.service.ts`, `apps/server/tests/message-activity.spec.ts`
+- 실행 안내와 사양·흐름·API·UI·설계·결정·매뉴얼·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/05_API_Specification.yaml`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 새 상담 감지와 알림음은 정상 동작했지만 팝업이 사이드바와 같은 HTML `aside` 요소를 사용해 전역 사이드바 스타일을 함께 적용받고 있었습니다.
+- 특히 900px 이하 화면에서 사이드바용 `aside { display: none; }` 규칙이 알림까지 숨겨 모바일에서는 소리만 들리고 팝업이 보이지 않았습니다.
+- 알림을 독립된 `section` 팝업으로 변경하고 사이드바 선택자를 `.shell > aside`로 제한해 PC와 모바일 모두 우측 상단 팝업을 표시하도록 수정했습니다.
+- 팝업은 호텔·객실·메시지 미리보기를 표시하고 8초 뒤 자동으로 닫히며, 새 상담의 `대기 상담 보기` 동작은 유지합니다.
+- 알림음은 기본으로 끄되 Agent가 `알림음 켜기/끄기`로 직접 선택하도록 변경했습니다. 같은 브라우저의 `localStorage`에 비민감 환경설정만 저장하며, 켜기 시 시험음으로 결과를 확인할 수 있습니다.
+- 저장소 접근이 차단된 브라우저에서는 오류로 화면을 중단하지 않고 기본 무음으로 동작하며, 팝업은 알림음 설정과 관계없이 항상 표시합니다.
+- Agent 탭이나 창이 비활성일 때 새 상담·고객 메시지가 오면 탭 제목을 1초 간격으로 교대하고, 탭을 다시 보거나 창에 초점을 맞추면 원래 제목으로 복구합니다. 이 동작은 브라우저 타이머 하나만 사용해 서버 요청을 추가하지 않습니다.
+- 진행 상담은 `lastActivityAt` 내림차순으로 표시하고 Socket 메시지를 받으면 REST 폴링 전에 해당 상담을 즉시 맨 위로 이동합니다.
+- Vercel·Render 무료 플랜 부하를 고려해 5초마다 메시지 전체의 최댓값을 집계하는 방식은 제외했습니다. 메시지 저장 트랜잭션에서 상담 행의 `lastActivityAt` 한 칸만 갱신하고 단일 인덱스로 목록을 정렬합니다.
+
+### 확인 방법
+
+- 사이드바 CSS 격리, 팝업 요소, 조건부 알림음·설정 저장, 제목 타이머 재사용·복구, 메시지와 최근 활동 시각의 트랜잭션 갱신을 확인하는 회귀 테스트를 추가했습니다.
+- 서버 31개, Agent 웹 24개, Guest 웹 10개 등 총 65개 테스트가 통과했습니다.
+- 전체 워크스페이스 타입 검사·프로덕션 빌드와 `git diff --check`가 통과했습니다.
+
 ## 2026-07-22 12:34:58 +09:00
 
 ### 수정한 파일

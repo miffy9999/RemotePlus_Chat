@@ -72,14 +72,14 @@ paths:
         "403": { description: 담당 상담이 아님 }
   /agent/chat-sessions:
     get:
-      summary: 상담 목록 조회
+      summary: 마지막 활동 시각 내림차순 상담 목록 조회
       security: [{ bearerAuth: [] }]
       parameters:
         - name: status
           in: query
           schema: { type: string, enum: [WAITING, ACTIVE, CLOSED, EXPIRED, CANCELLED, BLOCKED] }
       responses:
-        "200": { description: 상담 목록 }
+        "200": { description: 각 상담에 lastActivityAt을 포함한 최근 활동순 상담 목록 }
   /agent/chat-sessions/{sessionId}/accept:
     post:
       summary: Agent의 WAITING 상담 수락

@@ -24,10 +24,10 @@ h1, h2, p { margin-top: 0; }
 
 /* 투숙객 화면과 동일한 밝은 배경·흰 카드·파란 포인트를 Agent 전체 화면에 적용합니다. */
 .shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; background: #edf1f7; }
-aside { position: sticky; top: 0; height: 100vh; padding: 30px 22px; display: flex; flex-direction: column; color: #16213a; background: white; border-right: 1px solid #e3e8f1; }
-aside > .language-switcher { margin: -22px 0 22px; }
+.shell > aside { position: sticky; top: 0; height: 100vh; padding: 30px 22px; display: flex; flex-direction: column; color: #16213a; background: white; border-right: 1px solid #e3e8f1; }
+.shell > aside > .language-switcher { margin: -22px 0 22px; }
 .brand { margin-bottom: 36px; font-size: 22px; font-weight: 850; letter-spacing: 1px; }.brand span { color: #316bdb; }.brand.dark { color: #16213a; }
-nav { display: grid; gap: 8px; } nav a { padding: 12px; border-radius: 10px; color: #687288; text-decoration: none; font-weight: 700; } nav a:hover { color: #275bbb; background: #f0f5ff; } aside small { margin-top: auto; color: #8992a3; }
+.shell nav { display: grid; gap: 8px; } .shell nav a { padding: 12px; border-radius: 10px; color: #687288; text-decoration: none; font-weight: 700; } .shell nav a:hover { color: #275bbb; background: #f0f5ff; } .shell > aside small { margin-top: auto; color: #8992a3; }
 main { width: 100%; max-width: 1440px; margin: 0 auto; padding: 34px 42px; }
 main > header, .section-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
 .mobile-brand { display: none; font-size: 18px; font-weight: 850; letter-spacing: 1px; }.mobile-brand span { color: #316bdb; }
@@ -43,7 +43,7 @@ main > header p, .section-head p { margin-bottom: 0; color: #6d778c; }
 .stats span { color: #6d778c; font-size: 13px; font-weight: 700; }.stats strong { display: block; margin-top: 7px; font-size: 31px; }
 .card { margin-bottom: 22px; padding: 24px; background: white; border: 1px solid #e2e7f0; border-radius: 16px; box-shadow: 0 10px 28px rgba(33,48,79,.06); }
 .section-actions { display: flex; align-items: center; justify-content: flex-end; gap: 9px; }
-.agent-notice { position: fixed; z-index: 50; top: 20px; right: 20px; width: min(390px, calc(100vw - 40px)); padding: 17px 18px; border: 1px solid #cad9f4; border-left: 5px solid #316bdb; border-radius: 14px; color: #16213a; background: white; box-shadow: 0 18px 46px rgba(25,45,83,.22); animation: notice-in .2s ease-out; }
+.agent-notice { position: fixed; z-index: 50; top: 20px; right: 20px; width: min(390px, calc(100vw - 40px)); height: auto; display: block; padding: 17px 18px; border: 1px solid #cad9f4; border-left: 5px solid #316bdb; border-radius: 14px; color: #16213a; background: white; box-shadow: 0 18px 46px rgba(25,45,83,.22); animation: notice-in .2s ease-out; }
 .agent-notice-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .agent-notice-heading strong { padding-top: 7px; font-size: 15px; }
 .agent-notice-heading .link-button { min-width: 34px; padding: 4px 7px; font-size: 22px; line-height: 1; }
@@ -91,7 +91,7 @@ table { width: 100%; border-collapse: collapse; } th, td { padding: 15px 12px; t
 
 @media (max-width: 900px) {
   .shell { grid-template-columns: 1fr; }
-  aside { display: none; }
+  .shell > aside { display: none; }
   main { padding: 22px 16px 36px; }
   .mobile-brand { display: block; }
   .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }

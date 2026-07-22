@@ -29,7 +29,13 @@ export class MessagesService {
     const senderType = identity.kind === "guest" ? "GUEST" : "AGENT";
     const senderId = identity.kind === "staff" ? identity.staff.sub : null;
     try {
-      const message = await this.prisma.message.create({ data: { sessionId: session.id, senderType, senderId, clientMessageId: input.clientMessageId, messageType: "TEXT", content: input.content } });
+      // 메시지 저장과 상담 최근 활동 갱신을 한 트랜잭션으로 묶어 목록 정렬값이 실제 대화와 어긋나지 않게 합니다.
+      // 매 5초 전체 메시지 MAX 집계를 피하고 메시지당 인덱스 컬럼 1회 갱신만 수행해 무료 PostgreSQL 부하를 일정하게 유지합니다.
+      const message = await this.prisma.$transaction(async (transaction) => {
+        const created = await transaction.message.create({ data: { sessionId: session.id, senderType, senderId, clientMessageId: input.clientMessageId, messageType: "TEXT", content: input.content } });
+        await transaction.chatSession.update({ where: { id: session.id }, data: { lastActivityAt: created.createdAt } });
+        return created;
+      });
       return { message, duplicate: false };
     } catch (error) {
       // 네트워크 재전송으로 고유 제약이 충돌하면 기존 메시지를 반환해 같은 요청을 안전하게 반복할 수 있게 합니다.
