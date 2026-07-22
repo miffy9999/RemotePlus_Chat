@@ -4,11 +4,13 @@ import { describe, expect, it } from "vitest";
 const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 const mainSource = readFileSync(new URL("./main.tsx", import.meta.url), "utf8");
 
-describe("Agent 화면 팝업 CSS 격리", () => {
-  /** 모바일 사이드바 숨김 규칙이 모든 aside를 대상으로 하면 알림 팝업도 함께 사라지는 회귀를 막습니다. */
-  it("사이드바 스타일을 shell의 직계 aside에만 적용한다", () => {
-    expect(styles).toContain(".shell > aside { display: none; }");
-    expect(styles).not.toMatch(/(?:^|\n)\s*aside\s*\{/);
+describe("Agent 화면 레이아웃과 팝업 CSS 격리", () => {
+  /** 현재 화면으로 되돌아가는 링크 하나뿐인 사이드바가 다시 공간을 차지하는 회귀를 막습니다. */
+  it("기능 없는 사이드바를 렌더링하지 않고 언어 선택을 상단 동작에 유지한다", () => {
+    expect(mainSource).not.toContain("<aside>");
+    expect(mainSource).not.toContain('t("Agent 상담")');
+    expect(mainSource).toContain('<div className="agent-header-actions"><LanguageSwitcher/>');
+    expect(styles).not.toContain(".shell > aside");
   });
 
   /** 팝업은 사이드바와 다른 시맨틱 요소를 사용해 높이·배치·모바일 표시 규칙을 상속받지 않아야 합니다. */

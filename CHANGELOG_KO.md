@@ -1,5 +1,23 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 13:45:14 +09:00
+
+### 수정한 파일
+
+- Agent 공통 레이아웃과 회귀 테스트: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/popup-style.test.ts`
+- 기준 사양·UI·설계·매뉴얼·기능 현황: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 로그인 후 왼쪽 사이드바의 `Agent 상담`은 이미 보고 있는 `/agent` 페이지로 다시 이동할 뿐 다른 기능이나 상태를 제공하지 않아 삭제하기로 했습니다.
+- 사이드바에 있던 로고와 언어 선택은 Agent 이름·로그아웃과 함께 상단 헤더로 옮겨 기능을 유지하고, 데스크톱 가로 공간을 상담 목록과 채팅에 사용합니다.
+- 서버 요청, 데이터베이스 작업, 타이머를 추가하지 않는 순수 레이아웃 정리이므로 Vercel·Render 무료 플랜 부하는 변하지 않습니다.
+
+### 확인 방법
+
+- Agent 레이아웃에 사이드바와 반복 링크가 없고 상단 헤더에 로고·언어 선택·계정 동작이 유지되는지 회귀 테스트로 확인했습니다.
+- Agent 웹 테스트 25개, 타입 검사, 프로덕션 빌드와 `git diff --check`가 통과했습니다.
+
 ## 2026-07-22 13:02:09 +09:00
 
 ### 수정한 파일

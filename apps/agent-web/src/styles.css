@@ -22,16 +22,14 @@ button.danger:disabled { color: #8992a3; background: #edf0f4; }
 .admin-header-actions { display: flex; align-items: center; gap: 12px; }
 h1, h2, p { margin-top: 0; }
 
-/* 투숙객 화면과 동일한 밝은 배경·흰 카드·파란 포인트를 Agent 전체 화면에 적용합니다. */
-.shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; background: #edf1f7; }
-.shell > aside { position: sticky; top: 0; height: 100vh; padding: 30px 22px; display: flex; flex-direction: column; color: #16213a; background: white; border-right: 1px solid #e3e8f1; }
-.shell > aside > .language-switcher { margin: -22px 0 22px; }
+/* 단일 업무 흐름에 불필요한 사이드바 없이 상담 영역이 전체 폭을 사용하도록 구성합니다. */
+.shell { min-height: 100vh; background: #edf1f7; }
 .brand { margin-bottom: 36px; font-size: 22px; font-weight: 850; letter-spacing: 1px; }.brand span { color: #316bdb; }.brand.dark { color: #16213a; }
-.shell nav { display: grid; gap: 8px; } .shell nav a { padding: 12px; border-radius: 10px; color: #687288; text-decoration: none; font-weight: 700; } .shell nav a:hover { color: #275bbb; background: #f0f5ff; } .shell > aside small { margin-top: auto; color: #8992a3; }
 main { width: 100%; max-width: 1440px; margin: 0 auto; padding: 34px 42px; }
 main > header, .section-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; }
-.mobile-brand { display: none; font-size: 18px; font-weight: 850; letter-spacing: 1px; }.mobile-brand span { color: #316bdb; }
-.page-heading { min-width: 0; }
+.agent-brand { flex: 0 0 auto; font-size: 18px; font-weight: 850; letter-spacing: 1px; }.agent-brand span { color: #316bdb; }
+.agent-header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 16px; }
+.page-heading { flex: 1; min-width: 0; }
 main > header { margin-bottom: 28px; }.section-head { margin-bottom: 18px; }
 main > header h1 { margin-bottom: 7px; font-size: clamp(25px, 3vw, 34px); }.section-head h2 { margin-bottom: 6px; font-size: 19px; }
 main > header p, .section-head p { margin-bottom: 0; color: #6d778c; }
@@ -90,18 +88,16 @@ table { width: 100%; border-collapse: collapse; } th, td { padding: 15px 12px; t
 .room-link-cell { min-width: 220px; }.room-link-cell a { margin-right: 8px; color: #316bdb; font-weight: 700; text-decoration: none; }.room-link-cell a:hover { text-decoration: underline; }.compact { padding: 7px 10px; font-size: 12px; }
 
 @media (max-width: 900px) {
-  .shell { grid-template-columns: 1fr; }
-  .shell > aside { display: none; }
   main { padding: 22px 16px 36px; }
-  .mobile-brand { display: block; }
   .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 640px) {
   button { min-height: 42px; }
   main > header { align-items: flex-start; flex-wrap: wrap; margin-bottom: 18px; gap: 8px 12px; }
-  main > header .mobile-brand { order: 1; padding-top: 7px; }
-  main > header .profile { order: 2; margin-left: auto; font-size: 0; }
+  main > header .agent-brand { order: 1; padding-top: 7px; }
+  main > header .agent-header-actions { order: 2; margin-left: auto; gap: 6px; }
+  main > header .profile { font-size: 0; }
   main > header .page-heading { order: 3; flex-basis: 100%; padding-top: 8px; }
   main > header h1 { margin-bottom: 4px; font-size: 24px; }
   main > header p { font-size: 13px; line-height: 1.45; }
