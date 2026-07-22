@@ -24,6 +24,7 @@ import {
   listRooms,
   listSessions,
   loginStaff,
+  wakeApi,
   type AdminAgentView,
   type HotelView,
   type MessageView,
@@ -77,12 +78,18 @@ function LoginPage({
   const [saveMode, setSaveMode] = useState<LoginSaveMode>(initialPreference.mode);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [slowLogin, setSlowLogin] = useState(false);
   const navigate = useNavigate();
+
+  useEffect(() => { void wakeApi(); }, []);
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault();
     setLoading(true);
+    setSlowLogin(false);
     setError("");
+    // 일반 응답에는 보이지 않고 무료 Render 콜드 스타트가 시작된 경우에만 대기 이유를 알려줍니다.
+    const slowTimer = window.setTimeout(() => setSlowLogin(true), 4000);
     try {
       const auth = await loginStaff(loginId, password);
       // 이전 역할로 로그인했던 탭의 인증을 함께 남기지 않아 보호 경로가 오래된 역할을 선택하는 일을 막습니다.
@@ -98,6 +105,8 @@ function LoginPage({
         reason instanceof Error ? reason.message : "로그인에 실패했습니다.",
       );
     } finally {
+      window.clearTimeout(slowTimer);
+      setSlowLogin(false);
       setLoading(false);
     }
   }
@@ -152,8 +161,9 @@ function LoginPage({
         </div>
         <small className="login-save-help">{t("로그인 정보 저장은 브라우저 비밀번호 관리자를 사용합니다. 선택한 버튼을 다시 누르면 해제됩니다.")}</small>
         {error && <div className="error-box">{error}</div>}
+        {loading && slowLogin && <small className="login-wake-note" role="status">{t("무료 서버를 깨우는 중입니다. 첫 연결은 약 1분 걸릴 수 있습니다.")}</small>}
         <button disabled={loading}>
-          {t(loading ? "로그인 중…" : "로그인")}
+          {t(loading ? (slowLogin ? "서버 깨우는 중…" : "로그인 중…") : "로그인")}
         </button>
         <small>
           {t("계정 역할에 따라 관리 또는 상담 화면으로 이동합니다.")}

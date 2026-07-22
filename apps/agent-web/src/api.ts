@@ -2,6 +2,12 @@ import { AUTH_INVALID_EVENT, type AgentAuth } from "./auth-storage";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:4000/api";
 
+/** 실제 로그인 화면 방문 때 한 번만 무료 API 기동을 앞당기며 실패해도 뒤이은 로그인 요청이 정상적으로 다시 시도합니다. */
+export async function wakeApi(): Promise<void> {
+  try { await fetch(`${API_URL}/health`, { method: "GET", cache: "no-store", headers: { accept: "application/json" } }); }
+  catch { /* 무료 서버가 시작되는 중이거나 네트워크가 끊겨도 로그인 UI는 계속 사용합니다. */ }
+}
+
 /** 서버가 반환하는 상담 화면용 최소 타입입니다. */
 export interface SessionView {
   id: string;

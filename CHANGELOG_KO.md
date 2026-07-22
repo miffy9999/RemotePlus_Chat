@@ -1,5 +1,27 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 22:05:16 +09:00
+
+### 수정한 파일
+
+- 기존 직원 비밀번호 재시드 차단과 회귀 테스트: `apps/server/prisma/seed.ts`, `apps/server/tests/password-policy.spec.ts`, `.env.example`, `compose.yaml`, `render.yaml`
+- 무료 Render 사용자 기동·대기 안내와 테스트: `apps/agent-web/src/api.ts`, `apps/agent-web/src/main.tsx`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/api-login.test.ts`
+- README·기준 사양·설계·결정·매뉴얼·배포·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/08_System_Blueprint.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Free_Deployment_Guide.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 과거 Render 설정에 `SEED_RESET_EXISTING_PASSWORDS=true`가 남거나 코드 배포 때 시드가 다시 실행되면 변경한 비밀번호가 과거 시드 값으로 되돌아갈 수 있던 경로를 확인했습니다.
+- 재설정 환경변수와 조건 분기 자체를 삭제하고 두 기본 직원 upsert의 기존 행 갱신을 항상 빈 객체로 고정해, 시드 실행 횟수와 환경값에 관계없이 기존 비밀번호·토큰 버전을 건드릴 수 없게 했습니다.
+- 과거 허용된 세 계정 복구 마이그레이션 외에 새 데이터 마이그레이션이 직원 비밀번호를 변경하면 테스트가 실패하도록 회귀 경계를 추가했습니다.
+- Render 무료 Web Service는 15분간 HTTP·WebSocket 수신이 없으면 휴면하고 다음 요청에서 약 1분간 기동될 수 있으므로, 로그인 페이지 진입 시 헬스 요청을 한 번 보내 기동을 앞당기고 4초 이상 지연되면 사용자에게 원인을 안내합니다.
+- 유료 전용 pre-deploy 명령이나 무료 인스턴스를 계속 깨우는 외부 핑은 사용하지 않아 무료 플랜과 배포 안전성을 유지합니다.
+
+### 확인 방법
+
+- 시드의 기존 Agent update 불변, 새 비밀번호 데이터 마이그레이션 금지와 로그인 헬스 사전 요청·실패 격리를 자동 테스트합니다.
+- 서버·Agent·Guest 전체 테스트, 타입 검사, 프로덕션 빌드와 `git diff --check`를 실행합니다.
+- 배포 후 비밀번호를 한 번 변경하고 Render 재배포 뒤 새 비밀번호 성공·이전 비밀번호 거부를 실서버에서 확인합니다.
+
 ## 2026-07-22 15:57:15 +09:00
 
 ### 수정한 파일

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { loginStaff } from "./api";
+import { loginStaff, wakeApi } from "./api";
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -7,6 +7,15 @@ function jsonResponse(body: unknown, status: number): Response {
 
 describe("직원 통합 로그인 API", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  /** 로그인 화면을 실제로 연 경우에만 헬스 요청 한 번으로 무료 서버 기동을 앞당깁니다. */
+  it("로그인 전에 API 헬스를 한 번 호출하고 실패는 로그인 화면에 전파하지 않는다", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error("sleeping"));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(wakeApi()).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/health");
+  });
 
   /** 정상 배포에서는 역할 판별을 서버 요청 한 번으로 끝내 무료 Render의 인증 부하를 늘리지 않습니다. */
   it("통합 API 응답의 관리자 역할을 한 번의 요청으로 반환한다", async () => {
