@@ -23,6 +23,7 @@
    - `SEED_AGENT_PASSWORD`: 현재 무료 테스트 값 `agent01`
    - `ALLOW_INSECURE_TEST_PASSWORDS`: 무료 테스트에서만 `true`
    - `SEED_RESET_EXISTING_PASSWORDS`: 기존 테스트 계정을 시드 값으로 맞출 때만 `true`
+   - `FORCE_FREE_TEST_CREDENTIALS`: 현재 무료 테스트에서 서버 재시작 시 두 고정 계정을 유지하려면 `true`; 상업 전환 시 `false`
    - `SEED_ROOM_ACCESS_KEY`: 12자 이상의 첫 번째 객실 접속 키
    - `SEED_SECOND_ROOM_ACCESS_KEY`: 12자 이상의 두 번째 객실 접속 키
 

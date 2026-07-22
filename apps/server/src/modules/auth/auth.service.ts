@@ -1,14 +1,28 @@
-import { Injectable, Logger, UnauthorizedException } from "@nestjs/common";
-import { compare } from "bcrypt";
+import { Injectable, Logger, OnModuleInit, UnauthorizedException } from "@nestjs/common";
+import { compare, hash } from "bcrypt";
 import { sign, verify } from "jsonwebtoken";
 import { PrismaService } from "../../database/prisma.service";
 import type { GuestAccessPayload, RequestIdentity, StaffTokenPayload } from "./auth.types";
 
 /** 직원 로그인과 서버 발급 토큰의 생성·검증을 한곳에서 담당합니다. */
 @Injectable()
-export class AuthService {
+export class AuthService implements OnModuleInit {
   private readonly logger = new Logger(AuthService.name);
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Render의 기존 서비스가 Prisma 데이터 마이그레이션을 실행하지 않는 경우에도 무료 테스트 계정을 맞춥니다.
+   * 상업 전환 시 `FORCE_FREE_TEST_CREDENTIALS=false`로 끄면 서버 재시작이 운영 비밀번호를 덮어쓰지 않습니다.
+   */
+  async onModuleInit(): Promise<void> {
+    if ((process.env.FORCE_FREE_TEST_CREDENTIALS ?? "true") !== "true") return;
+    const [adminHash, agentHash] = await Promise.all([hash("admin", 12), hash("agent01", 12)]);
+    const [admin, agent] = await Promise.all([
+      this.prisma.agent.updateMany({ where: { loginId: "admin", role: "ADMIN" }, data: { passwordHash: adminHash } }),
+      this.prisma.agent.updateMany({ where: { loginId: "agent01", role: "AGENT" }, data: { passwordHash: agentHash } })
+    ]);
+    this.logger.warn(JSON.stringify({ event: "test-credentials.reset", adminUpdated: admin.count, agentUpdated: agent.count }));
+  }
 
   /**
    * 로그인 ID와 비밀번호를 확인하고 역할이 일치할 때만 JWT를 발급합니다.

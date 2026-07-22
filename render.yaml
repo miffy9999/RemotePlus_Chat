@@ -35,6 +35,8 @@ services:
         value: "true"
       - key: SEED_RESET_EXISTING_PASSWORDS
         value: "true"
+      - key: FORCE_FREE_TEST_CREDENTIALS
+        value: "true"
       - key: SEED_ROOM_ACCESS_KEY
         sync: false
       - key: SEED_SECOND_ROOM_ACCESS_KEY
