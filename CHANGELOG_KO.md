@@ -1,5 +1,50 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 15:22:11 +09:00
+
+### 수정한 파일
+
+- 상담 공개 응답·동일 NAT 요청 제한 보안 경계와 테스트: `apps/server/src/modules/chat-sessions/session-view.ts`, `apps/server/src/modules/chat-sessions/chat-sessions.service.ts`, `apps/server/src/modules/messages/messages.service.ts`, `apps/server/src/common/security/rest-rate-limit-policy.ts`, `apps/server/src/main.ts`, `apps/server/tests/session-view.spec.ts`, `apps/server/tests/message-activity.spec.ts`, `apps/server/tests/rest-rate-limit-policy.spec.ts`
+- 열린 상담·완료 로그 분리 조회와 테스트: `apps/server/src/modules/chat-sessions/chat-sessions.controller.ts`, `apps/server/src/modules/chat-sessions/dto/list-sessions.dto.ts`, `apps/server/tests/chat-session-list.spec.ts`, `apps/agent-web/src/api.ts`, `apps/agent-web/src/main.tsx`, `apps/agent-web/src/conversation-logs.test.ts`
+- 무료 테스트 계정 일회성 복구: `apps/server/prisma/migrations/20260722062000_repair_free_test_credentials/migration.sql`, `apps/server/tests/password-policy.spec.ts`
+- README·사양·흐름·API·UI·설계·분석·결정·매뉴얼·배포·출시 점검·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/05_API_Specification.yaml`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/09_Analysis_Roadmap.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`, `docs/12_Free_Deployment_Guide.md`, `docs/13_Commercial_Release_Checklist_KO.md`
+
+### 수정 내용과 이유
+
+- 공동 로그를 위해 Prisma의 Agent 전체 관계를 포함하면서 `passwordHash`, `tokenVersion` 같은 인증 내부값이 상담 REST·WebSocket 응답으로 노출될 수 있던 경로를 최소 필드 선택과 공용 직렬화 경계로 차단했습니다.
+- 메시지 전송 시점에 만료된 상담 이벤트가 투숙객 토큰 해시를 포함하고 고객 화면에 필요한 룸 관계를 누락해 화면 오류를 만들 수 있던 경로를 완전한 공개 상담 형식으로 교체했습니다.
+- Agent 공동 완료 로그를 활성 채팅 컴포넌트로 열어 타 Agent 방 입장 오류가 표시되던 문제를 관리자와 같은 읽기 전용 모달로 수정했습니다.
+- 5초 폴링은 `OPEN`만 조회하고 30일치 `COMPLETED` 로그는 최초 진입·상태 변경·60초마다 조회해 무료 Render DB와 전송량 부하를 줄였습니다. 구버전 Render와 겹치는 배포 구간에는 프런트가 자동으로 호환 조회합니다.
+- 직원 목록 제한 키를 원본 JWT가 아닌 `IP + 토큰 지문`으로 분리해 같은 콜센터 NAT의 여러 로그인 세션이 서로의 정상 5초 폴링 한도를 소진하지 않게 했습니다.
+- 과거 내용으로 이미 실행된 Prisma 마이그레이션이 수정 파일을 재실행하지 않아 Render에서 `admin / admin` 로그인이 되지 않던 문제를 새 일회성 마이그레이션으로 복구했습니다. 두 기본 계정의 해시가 다를 때만 변경하고 토큰 버전을 올리며 이후 재배포에서는 덮어쓰지 않습니다.
+- 공동 작업자의 최신 `main`을 fast-forward pull한 뒤 변경된 공동 로그 흐름을 포함해 화이트박스 QA를 수행하고 README와 관련 문서를 현재 구현에 맞췄습니다.
+
+### 확인 방법
+
+- 서버 테스트 46개, Agent 웹 테스트 40개, Guest 웹 테스트 13개와 전체 타입 검사·프로덕션 빌드 및 `git diff --check`를 실행합니다.
+- 배포 후 두 기본 계정 역할 로그인, API 헬스 체크, Vercel 배포 상태와 공개 상담 응답의 인증 내부 필드 부재를 확인합니다.
+
+## 2026-07-22 14:56:01 +09:00
+
+### 수정한 파일
+
+- 공동 상담 로그 권한: `apps/server/src/modules/chat-sessions/chat-sessions.service.ts`, `apps/server/src/modules/chat-sessions/session-policy.ts`, `apps/server/tests/session-policy.spec.ts`
+- Agent·관리자 공용 로그 UI: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/api.ts`, `apps/agent-web/src/conversation-logs.ts`, `apps/agent-web/src/conversation-logs.test.ts`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/popup-style.test.ts`
+- 사양·흐름·설계·매뉴얼·기능 현황: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 종료·만료·취소·차단된 상담을 담당자와 관계없이 모든 Agent와 관리자가 메시지까지 읽을 수 있는 공동 운영 로그로 변경했습니다.
+- 타 Agent가 담당 중인 활성 상담의 조회·종료 권한은 기존대로 차단해 실시간 업무 경계를 유지합니다.
+- Agent 화면의 본인 종료 상담 10건 제한을 없애고 전체 상담 로그와 호텔별 필터를 추가했습니다.
+- 관리자 페이지 최하단에도 같은 로그 블록과 호텔 필터를 추가하고, 기록 상세는 읽기 전용 모달로 표시합니다.
+- 로그가 많아져도 페이지가 과도하게 길어지지 않도록 목록 높이를 제한하고 내부 세로 스크롤을 적용했습니다.
+
+### 확인 방법
+
+- 다른 Agent의 완료 로그 허용·진행 상담 차단 서버 정책 테스트와 완료 상태·호텔별 UI 필터 테스트를 추가했습니다.
+- 서버 35개 테스트, Agent 웹 33개 테스트, 양쪽 타입 검사와 Agent 프로덕션 빌드가 통과했습니다.
+
 ## 2026-07-22 14:35:10 +09:00
 
 ### 수정한 파일
@@ -25,26 +70,6 @@
 
 - 로그인 ID 빈 초기값, 현재·빈 비밀번호 검증, bcrypt 변경, 토큰 버전 폐기, UI 입력 확인과 30일 보존 조건을 회귀 테스트로 확인했습니다.
 - 서버 테스트 38개와 Agent 웹 테스트 35개, 두 패키지 타입 검사·프로덕션 빌드와 `git diff --check`가 통과했습니다.
-## 2026-07-22 14:56:01 +09:00
-
-### 수정한 파일
-
-- 공동 상담 로그 권한: `apps/server/src/modules/chat-sessions/chat-sessions.service.ts`, `apps/server/src/modules/chat-sessions/session-policy.ts`, `apps/server/tests/session-policy.spec.ts`
-- Agent·관리자 공용 로그 UI: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/api.ts`, `apps/agent-web/src/conversation-logs.ts`, `apps/agent-web/src/conversation-logs.test.ts`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/popup-style.test.ts`
-- 사양·흐름·설계·매뉴얼·기능 현황: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
-
-### 수정 내용과 이유
-
-- 종료·만료·취소·차단된 상담을 담당자와 관계없이 모든 Agent와 관리자가 메시지까지 읽을 수 있는 공동 운영 로그로 변경했습니다.
-- 타 Agent가 담당 중인 활성 상담의 조회·종료 권한은 기존대로 차단해 실시간 업무 경계를 유지합니다.
-- Agent 화면의 본인 종료 상담 10건 제한을 없애고 전체 상담 로그와 호텔별 필터를 추가했습니다.
-- 관리자 페이지 최하단에도 같은 로그 블록과 호텔 필터를 추가하고, 기록 상세는 읽기 전용 모달로 표시합니다.
-- 로그가 많아져도 페이지가 과도하게 길어지지 않도록 목록 높이를 제한하고 내부 세로 스크롤을 적용했습니다.
-
-### 확인 방법
-
-- 다른 Agent의 완료 로그 허용·진행 상담 차단 서버 정책 테스트와 완료 상태·호텔별 UI 필터 테스트를 추가했습니다.
-- 서버 35개 테스트, Agent 웹 33개 테스트, 양쪽 타입 검사와 Agent 프로덕션 빌드가 통과했습니다.
 
 ## 2026-07-22 14:26:14 +09:00
 

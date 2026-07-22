@@ -27,6 +27,8 @@ export interface MessageView {
   createdAt: string;
 }
 
+export type SessionListScope = "OPEN" | "COMPLETED";
+
 /** HTTP 상태를 보존해 인증 실패와 순차 배포 중 아직 없는 엔드포인트를 안전하게 구분합니다. */
 class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
@@ -78,8 +80,18 @@ export function changeStaffPassword(token: string, currentPassword: string, newP
 }
 
 /** 상태 필터 없이 전체 목록을 받아 화면에서 역할과 탭에 맞게 나눕니다. */
-export function listSessions(token: string) {
-  return request<SessionView[]>("/agent/chat-sessions", { headers: { authorization: `Bearer ${token}` } });
+export async function listSessions(token: string, scope?: SessionListScope) {
+  const query = scope ? `?scope=${encodeURIComponent(scope)}` : "";
+  const init: RequestInit = { headers: { authorization: `Bearer ${token}` } };
+  try {
+    return await request<SessionView[]>(`/agent/chat-sessions${query}`, init);
+  } catch (reason) {
+    // Vercel이 먼저 배포되어 구버전 Render가 scope를 거부하는 짧은 구간에는 전체 목록을 한 번 받아 화면에서 같은 범위로 제한합니다.
+    if (!scope || !(reason instanceof ApiError) || ![400, 404].includes(reason.status)) throw reason;
+    const sessions = await request<SessionView[]>("/agent/chat-sessions", init);
+    const statuses = scope === "OPEN" ? ["WAITING", "ACTIVE"] : ["CLOSED", "EXPIRED", "CANCELLED", "BLOCKED"];
+    return sessions.filter((session) => statuses.includes(session.status));
+  }
 }
 
 /** WAITING 상담을 현재 Agent에게 원자적으로 배정합니다. */

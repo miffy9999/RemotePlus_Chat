@@ -17,10 +17,12 @@ describe("무료 테스트 비밀번호 정책", () => {
   });
 
   it("배포 마이그레이션의 bcrypt 해시가 지정한 두 테스트 비밀번호와 일치한다", async () => {
-    const migration = readFileSync(resolve(process.cwd(), "prisma/migrations/20260722022000_reset_free_test_credentials/migration.sql"), "utf8");
+    const migration = readFileSync(resolve(process.cwd(), "prisma/migrations/20260722062000_repair_free_test_credentials/migration.sql"), "utf8");
     const hashes = [...migration.matchAll(/\$2b\$12\$[./A-Za-z0-9]{53}/g)].map(([value]) => value);
-    expect(hashes).toHaveLength(2);
-    expect(await compare("admin", hashes[0]!)).toBe(true);
-    expect(await compare("agent01", hashes[1]!)).toBe(true);
+    const uniqueHashes = [...new Set(hashes)];
+    expect(uniqueHashes).toHaveLength(2);
+    expect(await compare("admin", uniqueHashes[0]!)).toBe(true);
+    expect(await compare("agent01", uniqueHashes[1]!)).toBe(true);
+    expect(migration).toContain('"tokenVersion" = "tokenVersion" + 1');
   });
 });

@@ -65,7 +65,8 @@ Phase 1 코드 읽기 순서:
 2. `modules/auth/auth.controller.ts`와 `auth.service.ts`에서 Agent JWT 발급 흐름을 읽는다.
 3. `modules/chat-sessions/chat-sessions.controller.ts`에서 역할별 API 경계를 확인한다.
 4. `chat-sessions.service.ts`에서 중복 상담 방지, 수락 경쟁 처리와 종료 권한을 확인한다.
-5. `session-policy.ts`와 테스트에서 허용·거부 상태를 함께 확인한다.
+5. `session-view.ts`에서 REST·WebSocket 공개 응답이 인증 내부 필드를 제거하는 경계를 확인한다.
+6. `session-policy.ts`와 테스트에서 허용·거부 상태를 함께 확인한다.
 
 ## 5단계 — WebSocket 메시지 흐름 따라가기
 

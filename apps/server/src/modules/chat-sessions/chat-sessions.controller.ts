@@ -45,7 +45,7 @@ export class AgentChatSessionsController {
   @Get()
   async list(@Req() request: Request, @Query() query: ListSessionsDto) {
     await requireStaff(request, this.auth, ["AGENT", "ADMIN"]);
-    return this.sessions.list(query.status);
+    return this.sessions.list(query.status, query.scope);
   }
 
   /** WAITING 상담을 현재 Agent에게 원자적으로 배정하고 ACTIVE로 전환합니다. */

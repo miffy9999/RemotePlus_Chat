@@ -420,7 +420,9 @@ function AgentNoticePopup({
 function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const { language, t } = useI18n();
   const [sessions, setSessions] = useState<SessionView[]>([]);
+  const [completedSessions, setCompletedSessions] = useState<SessionView[]>([]);
   const [selected, setSelected] = useState<SessionView | null>(null);
+  const [selectedLog, setSelectedLog] = useState<SessionView | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<AgentNotice | null>(null);
   const [soundEnabled, setSoundEnabled] = useState(() =>
@@ -439,6 +441,7 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const soundEnabledRef = useRef(soundEnabled);
   const titleFlasherRef = useRef<TitleFlasher | null>(null);
   const refreshInProgress = useRef(false);
+  const logRefreshInProgress = useRef(false);
   const listScrollPosition = useRef(0);
 
   useEffect(() => {
@@ -474,7 +477,7 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     if (refreshInProgress.current) return;
     refreshInProgress.current = true;
     try {
-      const data = await listSessions(auth.accessToken);
+      const data = await listSessions(auth.accessToken, "OPEN");
       const newWaiting = findNewWaitingSessions(knownWaitingIds.current, data);
       knownWaitingIds.current = waitingSessionIds(data);
 
@@ -521,6 +524,19 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     }
   }
 
+  /** 완료 로그는 별도 저주기 요청으로 받아 5초 폴링 응답에 30일치 기록이 반복 포함되지 않게 합니다. */
+  async function refreshConversationLogs(): Promise<void> {
+    if (logRefreshInProgress.current) return;
+    logRefreshInProgress.current = true;
+    try {
+      setCompletedSessions(await listSessions(auth.accessToken, "COMPLETED"));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "상담 로그를 불러오지 못했습니다.");
+    } finally {
+      logRefreshInProgress.current = false;
+    }
+  }
+
   useEffect(() => {
     const socket = io(SOCKET_URL, {
       auth: { staffToken: auth.accessToken },
@@ -562,6 +578,12 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     return () => window.clearInterval(timer);
   }, [auth.accessToken, auth.agent.id, language, t]);
 
+  useEffect(() => {
+    void refreshConversationLogs();
+    const timer = window.setInterval(() => void refreshConversationLogs(), 60_000);
+    return () => window.clearInterval(timer);
+  }, [auth.accessToken]);
+
   const waiting = useMemo(
     () => sessions.filter((item) => item.status === "WAITING"),
     [sessions],
@@ -576,9 +598,14 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     [sessions, auth.agent.id],
   );
   const conversationLogs = useMemo(
-    () => filterConversationLogs(sessions, ""),
-    [sessions],
+    () => filterConversationLogs(completedSessions, ""),
+    [completedSessions],
   );
+
+  function refreshAfterSessionChange(): void {
+    void refresh();
+    void refreshConversationLogs();
+  }
 
   function backToList(): void {
     setSelected(null);
@@ -627,7 +654,7 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           auth={auth}
           initial={selected}
           onBack={backToList}
-          onChanged={() => void refresh()}
+          onChanged={refreshAfterSessionChange}
         />
         {notice && (
           <AgentNoticePopup
@@ -735,8 +762,15 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
             )}
           />
         </section>
-        <ConversationLogBlock sessions={sessions} onOpen={open} />
+        <ConversationLogBlock sessions={conversationLogs} onOpen={setSelectedLog} />
       </Page>
+      {selectedLog && (
+        <ConversationLogModal
+          auth={auth}
+          session={selectedLog}
+          onClose={() => setSelectedLog(null)}
+        />
+      )}
       {notice && (
         <AgentNoticePopup
           notice={notice}
@@ -1161,7 +1195,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         listAdminAgents(auth.accessToken),
         listHotels(auth.accessToken),
         listRooms(auth.accessToken, filter || undefined),
-        listSessions(auth.accessToken),
+        listSessions(auth.accessToken, "COMPLETED"),
       ]);
       setAgents(a);
       setHotels(h);

@@ -5,6 +5,8 @@ import type { GuestAccessPayload, StaffTokenPayload } from "../auth/auth.types";
 import { assertCanAccept, assertCanClose, canStaffReadSession, isSessionExpired } from "./session-policy";
 import { Prisma, type ChatSessionStatus } from "@prisma/client";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import type { SessionListScope } from "./dto/list-sessions.dto";
+import { PUBLIC_AGENT_SELECT, toPublicSession } from "./session-view";
 
 const SESSION_DURATION_MS = 15 * 60 * 1000;
 const CHAT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -56,21 +58,29 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new ConflictException("이 객실에는 이미 진행 중인 상담이 있습니다.");
       throw error;
     }
-    return { session: this.toPublic(session), guestToken };
+    return { session: toPublicSession(session), guestToken };
   }
 
   /** 직원 또는 해당 투숙객 토큰만 상담 상세를 읽을 수 있습니다. */
   async get(id: string, staff: StaffTokenPayload | null, guestToken?: string) {
     const session = await this.findOrThrow(id);
     this.assertCanRead(session, staff, guestToken);
-    return this.toPublic(session);
+    return toPublicSession(session);
   }
 
   /** Agent 목록은 별도 메시지 집계 없이 인덱스가 있는 최근 활동 시각으로 정렬해 무료 DB 부하를 제한합니다. */
-  async list(status?: ChatSessionStatus) {
+  async list(status?: ChatSessionStatus, scope?: SessionListScope) {
     await this.expireDueSessions();
-    const sessions = await this.prisma.chatSession.findMany({ where: status ? { status } : undefined, include: { room: { include: { hotel: true } }, agent: true }, orderBy: [{ lastActivityAt: "desc" }, { createdAt: "desc" }] });
-    return sessions.map((session) => this.toPublic(session));
+    // 단일 상태가 지정되면 기존 API 의미를 유지하고, 그 외에는 화면 용도별 상태 그룹만 조회합니다.
+    const where: Prisma.ChatSessionWhereInput | undefined = status
+      ? { status }
+      : scope === "OPEN"
+        ? { status: { in: ["WAITING", "ACTIVE"] } }
+        : scope === "COMPLETED"
+          ? { status: { in: ["CLOSED", "EXPIRED", "CANCELLED", "BLOCKED"] } }
+          : undefined;
+    const sessions = await this.prisma.chatSession.findMany({ where, include: { room: { include: { hotel: true } }, agent: { select: PUBLIC_AGENT_SELECT } }, orderBy: [{ lastActivityAt: "desc" }, { createdAt: "desc" }] });
+    return sessions.map((session) => toPublicSession(session));
   }
 
   /** 동시 수락 경쟁에서도 한 Agent만 성공하도록 조건부 updateMany를 사용합니다. */
@@ -89,8 +99,8 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
   async close(id: string, requester: StaffTokenPayload) {
     const current = await this.findOrThrow(id);
     assertCanClose(current.status, current.agentId, requester.sub, requester.role === "ADMIN");
-    const session = await this.prisma.chatSession.update({ where: { id }, data: { status: "CLOSED", closedAt: new Date(), closeReason: "AGENT_CLOSED" }, include: { room: { include: { hotel: true } }, agent: true } });
-    const safe = this.toPublic(session);
+    const session = await this.prisma.chatSession.update({ where: { id }, data: { status: "CLOSED", closedAt: new Date(), closeReason: "AGENT_CLOSED" }, include: { room: { include: { hotel: true } }, agent: { select: PUBLIC_AGENT_SELECT } } });
+    const safe = toPublicSession(session);
     this.logger.log(JSON.stringify({ event: "session.closed", sessionId: id, actorId: requester.sub, reason: "AGENT_CLOSED" }));
     this.events.emit("chat.session.closed", safe);
     return safe;
@@ -121,16 +131,16 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async findOrThrow(id: string) {
-    let session = await this.prisma.chatSession.findUnique({ where: { id }, include: { room: { include: { hotel: true } }, agent: true } });
+    let session = await this.prisma.chatSession.findUnique({ where: { id }, include: { room: { include: { hotel: true } }, agent: { select: PUBLIC_AGENT_SELECT } } });
     if (!session) throw new NotFoundException("상담 세션을 찾을 수 없습니다.");
     // Phase 4의 주기 만료 작업 전에도 늦게 도착한 API 요청이 만료 상담을 사용하지 못하도록 즉시 동기화합니다.
     if (["WAITING", "ACTIVE"].includes(session.status) && isSessionExpired(session.expiresAt)) {
       session = await this.prisma.chatSession.update({
         where: { id },
         data: { status: "EXPIRED", closedAt: new Date(), closeReason: "TIME_LIMIT" },
-        include: { room: { include: { hotel: true } }, agent: true },
+        include: { room: { include: { hotel: true } }, agent: { select: PUBLIC_AGENT_SELECT } },
       });
-      this.events.emit("chat.session.closed", this.toPublic(session));
+      this.events.emit("chat.session.closed", toPublicSession(session));
     }
     return session;
   }
@@ -141,7 +151,7 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     const due = await this.prisma.chatSession.findMany({ where: { status: { in: ["WAITING", "ACTIVE"] }, expiresAt: { lte: now } }, select: { id: true } });
     for (const item of due) {
       const result = await this.prisma.chatSession.updateMany({ where: { id: item.id, status: { in: ["WAITING", "ACTIVE"] } }, data: { status: "EXPIRED", closedAt: now, closeReason: "TIME_LIMIT" } });
-      if (result.count === 1) { const session = await this.findOrThrow(item.id); const safe = this.toPublic(session); this.events.emit("chat.session.closed", safe); this.logger.log(JSON.stringify({ event: "session.expired", sessionId: item.id, reason: "TIME_LIMIT" })); }
+      if (result.count === 1) { const session = await this.findOrThrow(item.id); const safe = toPublicSession(session); this.events.emit("chat.session.closed", safe); this.logger.log(JSON.stringify({ event: "session.expired", sessionId: item.id, reason: "TIME_LIMIT" })); }
     }
   }
 
@@ -165,9 +175,4 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     throw new UnauthorizedException("이 상담을 조회할 권한이 없습니다.");
   }
 
-  /** DB 객체에서 접근 토큰 해시를 제거하고 화면에 필요한 정보만 반환합니다. */
-  private toPublic(session: any) {
-    const { guestTokenHash: _secret, ...safe } = session;
-    return safe;
-  }
 }

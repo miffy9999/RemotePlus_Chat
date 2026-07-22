@@ -613,8 +613,13 @@ POST /api/auth/login
 ### 상담 목록 조회
 
 ```http
-GET /api/agent/chat-sessions
+GET /api/agent/chat-sessions?scope=OPEN
+GET /api/agent/chat-sessions?scope=COMPLETED
 ```
+
+대기·진행 상담은 5초 폴링용 `OPEN`, 종료·만료·취소·차단 상담은 공동 로그용 `COMPLETED` 범위로 분리한다. 완료 로그는 최초 진입·상태 변경·60초 주기에만 갱신해 무료 DB와 네트워크에 5초마다 전체 30일 기록을 다시 싣지 않는다. 공개 상담 응답과 WebSocket 상태 이벤트는 투숙객 토큰 해시, 직원 비밀번호 해시와 토큰 버전을 포함하지 않으며 담당 직원 정보도 `id`, `name`만 반환한다.
+
+직원 목록 폴링의 요청 제한 키는 IP만 사용하지 않고 `IP + Bearer 토큰 지문`을 사용한다. 같은 콜센터 NAT에서 여러 직원·브라우저가 5초 폴링해도 서로의 정상 요청 한도를 소진하지 않되, 원본 JWT는 제한기 메모리에 저장하지 않는다.
 
 ### 상담원 수락
 
