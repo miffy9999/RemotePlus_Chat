@@ -7,6 +7,5 @@ export class LoginDto {
   loginId!: string;
 
   @IsString()
-  @Length(8, 100)
   password!: string;
 }

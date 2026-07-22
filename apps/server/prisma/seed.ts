@@ -21,6 +21,19 @@ function seedSecret(name: string, fallback: string, minimumLength = 12): string 
   return value || fallback;
 }
 
+/**
+ * 무료 테스트 배포는 사용자 결정에 따라 짧은 고정 비밀번호를 허용합니다.
+ * 테스트 플래그가 없는 운영 환경에서는 실수로 약한 시드 비밀번호를 쓰지 않도록 기존 12자 경계를 유지합니다.
+ */
+function seedPassword(name: string, fallback: string): string {
+  const value = process.env[name];
+  const allowInsecure = process.env.ALLOW_INSECURE_TEST_PASSWORDS === "true";
+  if (process.env.NODE_ENV === "production" && !allowInsecure && (!value || value === fallback || value.length < 12)) {
+    throw new Error(`${name}에 12자 이상의 운영용 임의 값을 설정하거나 테스트 허용 플래그를 켜야 합니다.`);
+  }
+  return value ?? fallback;
+}
+
 /** 개발용 접근 키도 운영 코드와 같은 SHA-256 규칙으로 저장합니다. */
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
@@ -44,10 +57,9 @@ async function seed(): Promise<void> {
   await prisma.roomAccessKey.upsert({ where: { keyHash: sha256(secondAccessKey) }, update: { status: "ACTIVE", encryptedKey: encryptSecret(secondAccessKey) }, create: { roomId: secondRoom.id, keyHash: sha256(secondAccessKey), encryptedKey: encryptSecret(secondAccessKey) } });
 
   // 명시적으로 테스트 모드를 켠 배포에서만 짧은 공용 비밀번호와 기존 계정 재설정을 허용합니다.
-  const testPasswordMinimum = process.env.ALLOW_INSECURE_TEST_PASSWORDS === "true" ? 8 : 12;
   const resetExistingPasswords = process.env.SEED_RESET_EXISTING_PASSWORDS === "true";
-  const adminPassword = await hash(seedSecret("SEED_ADMIN_PASSWORD", "Admin1234!", testPasswordMinimum), 12);
-  const agentPassword = await hash(seedSecret("SEED_AGENT_PASSWORD", "Agent1234!", testPasswordMinimum), 12);
+  const adminPassword = await hash(seedPassword("SEED_ADMIN_PASSWORD", "admin"), 12);
+  const agentPassword = await hash(seedPassword("SEED_AGENT_PASSWORD", "agent01"), 12);
   await prisma.agent.upsert({ where: { loginId: "admin" }, update: resetExistingPasswords ? { passwordHash: adminPassword } : {}, create: { name: "시스템 관리자", loginId: "admin", passwordHash: adminPassword, role: "ADMIN" } });
   await prisma.agent.upsert({ where: { loginId: "agent01" }, update: resetExistingPasswords ? { passwordHash: agentPassword } : {}, create: { name: "김상담", loginId: "agent01", passwordHash: agentPassword, role: "AGENT" } });
 }

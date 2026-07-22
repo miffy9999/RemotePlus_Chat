@@ -28,13 +28,13 @@ services:
       - key: GUEST_PUBLIC_URL
         sync: false
       - key: SEED_ADMIN_PASSWORD
-        sync: false
+        value: admin
       - key: SEED_AGENT_PASSWORD
-        sync: false
+        value: agent01
       - key: ALLOW_INSECURE_TEST_PASSWORDS
-        value: "false"
+        value: "true"
       - key: SEED_RESET_EXISTING_PASSWORDS
-        value: "false"
+        value: "true"
       - key: SEED_ROOM_ACCESS_KEY
         sync: false
       - key: SEED_SECOND_ROOM_ACCESS_KEY

@@ -1,5 +1,35 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 11:46:15 +09:00
+
+### 수정한 파일
+
+- 인증 입력 정책과 테스트: `apps/server/src/modules/auth/dto/login.dto.ts`, `apps/server/src/modules/admin/dto/create-agent.dto.ts`, `apps/server/tests/password-policy.spec.ts`, `apps/server/tests/auth-service.spec.ts`
+- 테스트 계정 시드와 기존 DB 갱신: `apps/server/prisma/seed.ts`, `apps/server/prisma/migrations/20260722022000_reset_free_test_credentials/migration.sql`
+- 로컬·Render 환경 설정: `.env.example`, `compose.yaml`, `render.yaml`
+- 관리자 화면: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/i18n.tsx`
+- 사양·결정·배포·보안 문서: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`, `docs/12_Free_Deployment_Guide.md`, `docs/13_Commercial_Release_Checklist_KO.md`, `README.md`
+
+### 수정 내용
+
+- 무료 테스트 관리자 계정을 `admin / admin`, Agent 계정을 `agent01 / agent01`로 변경했습니다.
+- 로그인과 관리자 Agent 생성에서 비밀번호 길이·문자 조합 제한을 제거했습니다. 로그인 ID·이름·역할 검증은 유지합니다.
+- 새 테스트 환경의 시드 기본값과 Docker·Render 설정을 같은 계정으로 맞췄습니다.
+- 현재 Render DB처럼 이미 생성된 계정도 바뀌도록 bcrypt cost 12 해시만 포함하는 일회성 데이터 마이그레이션을 추가했습니다.
+- 상업 배포 전 강한 개별 비밀번호 정책을 복원해야 한다는 차단 항목을 문서에 명시했습니다.
+
+### 수정 이유
+
+현재 무료 테스트 단계에서 단순한 공용 계정으로 빠르게 로그인하려는 사용자 결정과 기존 서버의 8자·영문 숫자 조합 제한이 충돌해 이를 제거했습니다. 편의를 위해 제한은 없애되 데이터베이스 평문 저장은 피하고 기존 bcrypt 검증 흐름을 유지했습니다.
+
+### 확인 방법
+
+- `pnpm test`: 서버 22개, Agent 웹 11개, Guest 웹 4개 등 총 37개 테스트가 통과했습니다.
+- `pnpm lint`, `pnpm build`: 전체 워크스페이스 타입 검사와 프로덕션 빌드가 통과했습니다.
+- 마이그레이션에 포함한 두 bcrypt 해시가 각각 `admin`, `agent01`과 일치함을 회귀 테스트로 확인했습니다.
+- `pnpm audit --prod`: 알려진 production 의존성 취약점이 0건임을 확인했습니다.
+- `git diff --check`와 Render 마이그레이션 배포 후 실제 두 계정 로그인을 최종 확인합니다.
+
 ## 2026-07-22 11:04:58 +09:00
 
 ### 수정한 파일

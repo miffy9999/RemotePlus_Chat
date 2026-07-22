@@ -28,7 +28,7 @@ docker compose ps
 | 서버 상태 확인 | http://127.0.0.1:4100/api/health |
 | 고객 웹 | 관리자 페이지의 룸 목록에서 생성된 주소 사용 |
 
-개발용 초기 계정은 관리자 `admin / Admin1234!`, Agent `agent01 / Agent1234!`입니다.
+무료 테스트 계정은 관리자 `admin / admin`, Agent `agent01 / agent01`입니다. DB에는 bcrypt 해시로 저장되지만 비밀번호 자체가 매우 약하므로 외부 공개·상업 운영 전 반드시 교체해야 합니다.
 
 ### 로그 확인과 종료
 

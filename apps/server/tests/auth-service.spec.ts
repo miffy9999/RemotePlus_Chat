@@ -12,11 +12,11 @@ describe("24시간 콜센터 직원 인증", () => {
 
   /** 직원 로그인 JWT에는 exp를 넣지 않아 브라우저 탭을 유지하는 동안 재로그인을 요구하지 않습니다. */
   it("직원 토큰을 만료 시각 없이 발급한다", async () => {
-    const passwordHash = await hash("remote1234!", 4);
+    const passwordHash = await hash("agent01", 4);
     const prisma = { agent: { findUnique: jest.fn().mockResolvedValue({ id: "agent-id", name: "Agent", role: "AGENT", status: "ACTIVE", passwordHash }) } };
     const auth = new AuthService(prisma as never);
 
-    const result = await auth.login("agent01", "remote1234!", "AGENT");
+    const result = await auth.login("agent01", "agent01", "AGENT");
     const payload = decode(result.accessToken) as { exp?: number };
 
     expect(payload.exp).toBeUndefined();

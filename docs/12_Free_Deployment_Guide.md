@@ -19,12 +19,14 @@
 
    - `WEB_ORIGINS`: 최초에는 `https://example.invalid`을 입력하고 Vercel 주소가 정해진 뒤 교체합니다.
    - `GUEST_PUBLIC_URL`: 최초에는 `https://example.invalid`을 입력하고 Guest Vercel 주소가 정해진 뒤 교체합니다.
-   - `SEED_ADMIN_PASSWORD`: 12자 이상의 테스트 관리자 비밀번호
-   - `SEED_AGENT_PASSWORD`: 12자 이상의 테스트 Agent 비밀번호
+   - `SEED_ADMIN_PASSWORD`: 현재 무료 테스트 값 `admin`
+   - `SEED_AGENT_PASSWORD`: 현재 무료 테스트 값 `agent01`
+   - `ALLOW_INSECURE_TEST_PASSWORDS`: 무료 테스트에서만 `true`
+   - `SEED_RESET_EXISTING_PASSWORDS`: 기존 테스트 계정을 시드 값으로 맞출 때만 `true`
    - `SEED_ROOM_ACCESS_KEY`: 12자 이상의 첫 번째 객실 접속 키
    - `SEED_SECOND_ROOM_ACCESS_KEY`: 12자 이상의 두 번째 객실 접속 키
 
-`JWT_SECRET`, `ACCESS_KEY_ENCRYPTION_SECRET`, `DATABASE_URL`은 Blueprint가 자동으로 생성·연결합니다. 비밀번호와 접속 키는 저장소나 Vercel의 `VITE_` 환경변수에 넣지 않습니다.
+`JWT_SECRET`, `ACCESS_KEY_ENCRYPTION_SECRET`, `DATABASE_URL`은 Blueprint가 자동으로 생성·연결합니다. 현재 고정 계정은 무료 테스트 전용이며 상업 배포에서는 `ALLOW_INSECURE_TEST_PASSWORDS=false`로 되돌리고 강한 비밀번호를 Render 비밀 환경변수로 설정합니다. 비밀번호와 접속 키는 Vercel의 `VITE_` 환경변수에 넣지 않습니다.
 
 API 배포가 완료되면 `https://remoteplus-api.onrender.com/api/health` 형식의 주소에서 `status: ok`를 확인합니다. 서비스 이름 중복 시 실제 Render 주소가 달라질 수 있으므로 Dashboard의 주소를 기준으로 합니다.
 
