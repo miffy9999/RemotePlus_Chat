@@ -23,12 +23,13 @@ const validAccess = {
     room: { roomNumber: "101", hotel: { name: "테스트 호텔" } },
   },
 } satisfies StoredGuestAccess;
+const beforeExpiry = new Date("2026-07-22T03:00:00.000Z").getTime();
 
-describe("게스트 상담 탭 저장소", () => {
+describe("게스트 상담 기기 저장소", () => {
   it("정상 상담 정보를 접근 키별로 저장하고 복원한다", () => {
     const storage = memoryStorage();
     saveStoredGuestAccess("room-a", validAccess, storage);
-    expect(readStoredGuestAccess("room-a", storage)).toEqual(validAccess);
+    expect(readStoredGuestAccess("room-a", storage, beforeExpiry)).toEqual(validAccess);
   });
 
   it("깨진 JSON을 제거하고 신규 상담 흐름에 사용할 null을 반환한다", () => {
@@ -42,12 +43,25 @@ describe("게스트 상담 탭 저장소", () => {
     expect(readStoredGuestAccess("room-a", storage)).toBeNull();
   });
 
+  it("브라우저 시각 기준으로 만료된 상담 정보를 즉시 제거한다", () => {
+    const storage = memoryStorage();
+    saveStoredGuestAccess("room-a", validAccess, storage);
+    expect(readStoredGuestAccess("room-a", storage, new Date("2026-07-22T04:00:01.000Z").getTime())).toBeNull();
+    expect(storage.getItem("hotel-chat-guest:room-a")).toBeNull();
+  });
+
+  it.each(["CLOSED", "EXPIRED"] as const)("%s 상담 정보는 재접속에 사용하지 않고 제거한다", (status) => {
+    const storage = memoryStorage();
+    saveStoredGuestAccess("room-a", { ...validAccess, session: { ...validAccess.session, status } }, storage);
+    expect(readStoredGuestAccess("room-a", storage, new Date("2026-07-22T03:00:00.000Z").getTime())).toBeNull();
+  });
+
   it("한 객실의 인증 실패 정리가 다른 객실 상담을 삭제하지 않는다", () => {
     const storage = memoryStorage();
     saveStoredGuestAccess("room-a", validAccess, storage);
     saveStoredGuestAccess("room-b", { ...validAccess, guestToken: "room-b-token" }, storage);
     clearStoredGuestAccess("room-a", storage);
     expect(readStoredGuestAccess("room-a", storage)).toBeNull();
-    expect(readStoredGuestAccess("room-b", storage)?.guestToken).toBe("room-b-token");
+    expect(readStoredGuestAccess("room-b", storage, beforeExpiry)?.guestToken).toBe("room-b-token");
   });
 });

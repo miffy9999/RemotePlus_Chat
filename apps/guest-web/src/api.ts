@@ -5,11 +5,16 @@ export interface GuestSession { id: string; status: "WAITING" | "ACTIVE" | "CLOS
 export interface GuestMessage { id: string; sessionId: string; senderType: "GUEST" | "AGENT" | "SYSTEM"; senderId: string | null; clientMessageId: string; content: string; createdAt: string; }
 export interface StoredGuestAccess { session: GuestSession; guestToken: string; }
 
+/** HTTP 상태와 서버 메시지를 함께 보존해 인증 실패와 일시 장애의 저장소 처리 정책을 구분합니다. */
+export class GuestApiError extends Error {
+  constructor(message: string, readonly status: number) { super(message); this.name = "GuestApiError"; }
+}
+
 /** 투숙객 REST 오류를 화면에서 설명할 수 있도록 서버 메시지를 보존합니다. */
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_URL}${path}`, { ...init, headers: { "content-type": "application/json", ...(init.headers ?? {}) } });
   const body = await response.json().catch(() => ({}));
-  if (!response.ok) { const message = Array.isArray(body.message) ? body.message.join(", ") : body.message; throw new Error(message ?? "서버 요청에 실패했습니다."); }
+  if (!response.ok) { const message = Array.isArray(body.message) ? body.message.join(", ") : body.message; throw new GuestApiError(message ?? "서버 요청에 실패했습니다.", response.status); }
   return body as T;
 }
 
@@ -17,7 +22,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export function verifyAccess(accessKey: string) { return request<{ accessToken: string }>("/guest/access/verify", { method: "POST", body: JSON.stringify({ accessKey }) }); }
 /** 검증 JWT로 WAITING 상담과 새 투숙객 불투명 토큰을 생성합니다. */
 export function createSession(accessToken: string, language: string) { return request<StoredGuestAccess>("/chat-sessions", { method: "POST", headers: { authorization: `Bearer ${accessToken}` }, body: JSON.stringify({ language }) }); }
-/** 새로고침 후 sessionStorage의 불투명 토큰이 아직 유효한지 확인합니다. */
+/** 새 탭·새로고침 후 localStorage의 불투명 토큰이 아직 유효한지 확인합니다. */
 export function getSession(sessionId: string, guestToken: string) { return request<GuestSession>(`/chat-sessions/${sessionId}`, { headers: { "x-guest-token": guestToken } }); }
 /** 재연결 시 데이터베이스에 저장된 메시지 이력을 복구합니다. */
 export function getMessages(sessionId: string, guestToken: string) { return request<GuestMessage[]>(`/chat-sessions/${sessionId}/messages`, { headers: { "x-guest-token": guestToken } }); }

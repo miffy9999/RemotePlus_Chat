@@ -1,7 +1,7 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { io, type Socket } from "socket.io-client";
-import { createSession, getMessages, getSession, SOCKET_URL, type GuestMessage, type GuestSession, type StoredGuestAccess, verifyAccess } from "./api";
+import { createSession, getMessages, getSession, GuestApiError, SOCKET_URL, type GuestMessage, type GuestSession, type StoredGuestAccess, verifyAccess } from "./api";
 import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
 import { LanguageProvider, normalizeGuestUiLanguage, useI18n } from "./i18n";
 import { clearStoredGuestAccess, readStoredGuestAccess, saveStoredGuestAccess } from "./guest-access-storage";
@@ -27,7 +27,19 @@ function GuestApp(): React.JSX.Element {
       if (!accessKey) { setError("접근 키가 없는 링크입니다. 테스트 링크의 accessKey 값을 확인하세요."); setScreen("error"); return; }
       try {
         const stored = readStoredGuestAccess(accessKey);
-        if (stored) { try { const session = await getSession(stored.session.id, stored.guestToken); setUiLanguage(normalizeGuestUiLanguage(session.language)); setAccess({ ...stored, session }); setScreen("ready"); return; } catch { clearStoredGuestAccess(accessKey); } }
+        if (stored) {
+          try {
+            const session = await getSession(stored.session.id, stored.guestToken);
+            const restorable = ["WAITING", "ACTIVE"].includes(session.status) && new Date(session.expiresAt).getTime() > Date.now();
+            if (restorable) { setUiLanguage(normalizeGuestUiLanguage(session.language)); setAccess({ ...stored, session }); setScreen("ready"); return; }
+            // 서버가 종료·만료 상태를 반환하면 오래된 기기 토큰을 제거하고 새 상담 동의 화면으로 이동합니다.
+            clearStoredGuestAccess(accessKey); setScreen("consent"); return;
+          } catch (reason) {
+            // 인증이 거부되거나 상담이 삭제된 경우만 복구 정보를 폐기하고, 일시적인 서버 장애에는 토큰을 보존합니다.
+            if (reason instanceof GuestApiError && [401, 403, 404].includes(reason.status)) { clearStoredGuestAccess(accessKey); setScreen("consent"); return; }
+            throw reason;
+          }
+        }
         // 저장된 상담이 없다면 자동 생성하지 않고 사용자가 언어와 이용 안내를 확인하도록 합니다.
         setScreen("consent");
       } catch (reason) { setError(reason instanceof Error ? reason.message : "상담을 시작하지 못했습니다."); setScreen("error"); }
@@ -43,11 +55,20 @@ function GuestApp(): React.JSX.Element {
     socket.on("connect", async () => { setConnection("연결됨"); const joined = await socket.emitWithAck("chat:join", { sessionId: access.session.id }); if (!joined?.ok) setError(joined?.error?.message ?? "상담방 입장에 실패했습니다."); });
     socket.on("disconnect", () => setConnection("연결 끊김")); socket.io.on("reconnect_attempt", () => setConnection("재연결 중"));
     socket.on("chat:message", (message: GuestMessage) => setMessages((items) => mergeMessage(items, message))); socket.on("chat:message-accepted", (message: GuestMessage) => setMessages((items) => mergeMessage(items, message)));
-    socket.on("chat:session-updated", (session: GuestSession) => { if (session.id === access.session.id) setAccess((current) => current ? { ...current, session } : current); }); socket.on("chat:session-closed", (session: GuestSession) => { if (session.id === access.session.id) setAccess((current) => current ? { ...current, session } : current); }); socket.on("chat:error", (payload: { message: string }) => setError(payload.message));
+    socket.on("chat:session-updated", (session: GuestSession) => { if (session.id === access.session.id) setAccess((current) => current ? { ...current, session } : current); }); socket.on("chat:session-closed", (session: GuestSession) => { if (session.id === access.session.id) { clearStoredGuestAccess(accessKey); setAccess((current) => current ? { ...current, session } : current); } }); socket.on("chat:error", (payload: { message: string }) => setError(payload.message));
     return () => { active = false; socket.disconnect(); socketRef.current = null; };
   }, [access?.session.id, access?.guestToken]);
 
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => {
+    if (!access) return;
+    const terminal = access.session.status === "CLOSED" || access.session.status === "EXPIRED";
+    const expiredByClock = new Date(access.session.expiresAt).getTime() <= now;
+    if (!terminal && !expiredByClock) return;
+    // 서버 이벤트가 늦더라도 브라우저 만료 시각에 복구 토큰을 제거해 다음 QR 진입이 오래된 상담에 묶이지 않게 합니다.
+    clearStoredGuestAccess(accessKey);
+    if (expiredByClock && !terminal) setAccess((current) => current ? { ...current, session: { ...current.session, status: "EXPIRED" } } : current);
+  }, [access, accessKey, now]);
   useEffect(() => {
     // 새 메시지와 상담 종료 이벤트가 반영될 때 채팅 목록만 아래로 이동해 휴대폰 전체 화면이 튀지 않게 합니다.
     const frame = window.requestAnimationFrame(() => {
