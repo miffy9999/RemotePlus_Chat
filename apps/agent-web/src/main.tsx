@@ -324,7 +324,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
 function Page({ auth, title, subtitle, chatMode = false, children }: React.PropsWithChildren<{ auth: AgentAuth; title: string; subtitle: string; chatMode?: boolean }>): React.JSX.Element {
   const { t } = useI18n();
   function logout(): void { clearStoredAuth("AGENT"); location.href = "/login"; }
-  return <div className={`shell ${chatMode ? "chat-shell" : ""}`}><aside><div className="brand">REMOTE<span>+</span></div><LanguageSwitcher/><nav><Link to="/agent">{t("Agent 상담")}</Link><Link to="/admin">{t("관리자 페이지")}</Link></nav><small>Hotel Chat MVP</small></aside><main className={chatMode ? "chat-page" : ""}><header><div className="mobile-brand">REMOTE<span>+</span></div><div className="page-heading"><h1>{title}</h1><p>{subtitle}</p></div><div className="profile">{auth.agent.name}<span>AG</span><button className="link-button" onClick={logout}>{t("로그아웃")}</button></div></header>{children}</main></div>;
+  return <div className={`shell ${chatMode ? "chat-shell" : ""}`}><aside><div className="brand">REMOTE<span>+</span></div><LanguageSwitcher/><nav><Link to="/agent">{t("Agent 상담")}</Link></nav><small>Hotel Chat MVP</small></aside><main className={chatMode ? "chat-page" : ""}><header><div className="mobile-brand">REMOTE<span>+</span></div><div className="page-heading"><h1>{title}</h1><p>{subtitle}</p></div><div className="profile">{auth.agent.name}<span>AG</span><button className="link-button" onClick={logout}>{t("로그아웃")}</button></div></header>{children}</main></div>;
 }
 
 /** 인증 상태에 따라 로그인과 Agent 업무 화면 접근을 분리합니다. */
