@@ -1,5 +1,25 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 12:34:58 +09:00
+
+### 수정한 파일
+
+- 게스트 상담 저장소 복구와 테스트: `apps/guest-web/src/main.tsx`, `apps/guest-web/src/guest-access-storage.ts`, `apps/guest-web/src/guest-access-storage.test.ts`
+- 서버 상담 언어 기본값과 테스트: `apps/server/src/modules/chat-sessions/dto/create-session.dto.ts`, `apps/server/tests/guest-language-policy.spec.ts`
+- 기준 사양·흐름·API·설계·기능 현황: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/05_API_Specification.yaml`, `docs/08_System_Blueprint.md`, `docs/12_Feature_Status.md`
+
+### 화이트박스 QA 발견 사항과 수정 이유
+
+- 게스트 웹은 일본어를 기본으로 변경했지만 서버 DTO의 생략 기본값은 한국어로 남아 있어 API 직접 호출과 화면 생성 결과가 달라질 수 있었습니다. 서버 기본값도 일본어로 통일하고 네 지원 언어 및 미지원 값 거부를 회귀 테스트로 고정했습니다.
+- 접근 키별 `sessionStorage`가 올바르지 않은 JSON이면 초기 파싱이 실패하면서 고객이 오류 화면에서 벗어날 수 없었습니다. 저장값 파싱과 최소 구조 검증을 별도 경계로 분리하고, 손상된 해당 객실 항목만 삭제한 뒤 동의 화면으로 복구하도록 수정했습니다.
+- 상담 언어의 일본어 기본값과 지원 범위, 손상된 탭 저장소 복구 동작을 원본 사양과 API 계약에 명시했습니다.
+
+### 확인 방법
+
+- Guest 웹 저장소 복구 테스트 4개와 전체 Guest 웹 테스트 10개가 통과했습니다.
+- 서버 상담 언어 정책 테스트 6개를 포함해 서버 30개, Agent 웹 15개, Guest 웹 10개 등 총 55개 테스트가 통과했습니다.
+- 전체 워크스페이스 타입 검사·프로덕션 빌드와 `git diff --check`가 통과했습니다.
+
 ## 2026-07-22 12:24:16 +09:00
 
 ### 수정한 파일

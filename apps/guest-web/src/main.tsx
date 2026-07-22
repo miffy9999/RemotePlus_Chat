@@ -4,12 +4,10 @@ import { io, type Socket } from "socket.io-client";
 import { createSession, getMessages, getSession, SOCKET_URL, type GuestMessage, type GuestSession, type StoredGuestAccess, verifyAccess } from "./api";
 import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
 import { LanguageProvider, normalizeGuestUiLanguage, useI18n } from "./i18n";
+import { clearStoredGuestAccess, readStoredGuestAccess, saveStoredGuestAccess } from "./guest-access-storage";
 import "./styles.css";
 
 type ScreenState = "loading" | "consent" | "ready" | "error";
-
-/** 접근 키별 상담 토큰을 현재 브라우저 탭에만 보관해 새로고침 복구와 노출 최소화를 함께 만족합니다. */
-function storageKey(accessKey: string): string { return `hotel-chat-guest:${accessKey}`; }
 
 /** 테스트 링크 진입부터 상담 생성·복구, Socket.IO 채팅까지 투숙객 전체 흐름을 담당합니다. */
 function GuestApp(): React.JSX.Element {
@@ -28,8 +26,8 @@ function GuestApp(): React.JSX.Element {
     async function prepare(): Promise<void> {
       if (!accessKey) { setError("접근 키가 없는 링크입니다. 테스트 링크의 accessKey 값을 확인하세요."); setScreen("error"); return; }
       try {
-        const stored = JSON.parse(sessionStorage.getItem(storageKey(accessKey)) ?? "null") as StoredGuestAccess | null;
-        if (stored) { try { const session = await getSession(stored.session.id, stored.guestToken); setUiLanguage(normalizeGuestUiLanguage(session.language)); setAccess({ ...stored, session }); setScreen("ready"); return; } catch { sessionStorage.removeItem(storageKey(accessKey)); } }
+        const stored = readStoredGuestAccess(accessKey);
+        if (stored) { try { const session = await getSession(stored.session.id, stored.guestToken); setUiLanguage(normalizeGuestUiLanguage(session.language)); setAccess({ ...stored, session }); setScreen("ready"); return; } catch { clearStoredGuestAccess(accessKey); } }
         // 저장된 상담이 없다면 자동 생성하지 않고 사용자가 언어와 이용 안내를 확인하도록 합니다.
         setScreen("consent");
       } catch (reason) { setError(reason instanceof Error ? reason.message : "상담을 시작하지 못했습니다."); setScreen("error"); }
@@ -59,7 +57,7 @@ function GuestApp(): React.JSX.Element {
     return () => window.cancelAnimationFrame(frame);
   }, [messages.length, access?.session.status]);
   /** 동의 버튼을 누른 시점에만 접근 키를 검증하고 새 상담을 생성합니다. */
-  async function startConsultation(): Promise<void> { if (!agreed || starting) return; setStarting(true); setError(""); try { const verified = await verifyAccess(accessKey); const created = await createSession(verified.accessToken, language); sessionStorage.setItem(storageKey(accessKey), JSON.stringify(created)); setAccess(created); setScreen("ready"); } catch (reason) { setError(reason instanceof Error ? reason.message : "상담을 시작하지 못했습니다."); setScreen("error"); } finally { setStarting(false); } }
+  async function startConsultation(): Promise<void> { if (!agreed || starting) return; setStarting(true); setError(""); try { const verified = await verifyAccess(accessKey); const created = await createSession(verified.accessToken, language); saveStoredGuestAccess(accessKey, created); setAccess(created); setScreen("ready"); } catch (reason) { setError(reason instanceof Error ? reason.message : "상담을 시작하지 못했습니다."); setScreen("error"); } finally { setStarting(false); } }
   async function send(event: FormEvent): Promise<void> { event.preventDefault(); const content = input.trim(); if (!content || !access || access.session.status !== "ACTIVE" || !socketRef.current) return; setInput(""); const result = await socketRef.current.emitWithAck("chat:message", { sessionId: access.session.id, clientMessageId: crypto.randomUUID(), content }); if (!result?.ok) setError(result?.error?.message ?? "메시지 전송에 실패했습니다."); }
 
   if (screen === "loading") return <div className="center-card"><div className="spinner"/><h1>{t("상담을 준비하고 있습니다")}</h1><p>{t("객실 접근 정보를 안전하게 확인하는 중입니다.")}</p></div>;
