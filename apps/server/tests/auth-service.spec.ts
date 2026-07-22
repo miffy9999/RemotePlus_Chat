@@ -50,6 +50,27 @@ describe("24시간 콜센터 직원 인증", () => {
     expect(payload.exp).toBeUndefined();
   });
 
+  /** 공통 로그인은 사용자가 역할을 미리 선택하지 않아도 저장된 역할을 그대로 반환하며 계정 조회를 반복하지 않습니다. */
+  it("통합 로그인에서 관리자 역할을 한 번의 조회로 판별한다", async () => {
+    const passwordHash = await hash("admin", 4);
+    const findUnique = jest.fn().mockResolvedValue({ id: "admin-id", name: "Admin", role: "ADMIN", status: "ACTIVE", passwordHash });
+    const auth = new AuthService({ agent: { findUnique } } as never);
+
+    const result = await auth.login("admin", "admin");
+
+    expect(result.agent.role).toBe("ADMIN");
+    expect(findUnique).toHaveBeenCalledTimes(1);
+  });
+
+  /** 남아 있는 구버전 역할별 엔드포인트는 다른 역할 계정에 토큰을 발급하지 않아 기존 권한 경계를 유지합니다. */
+  it("구버전 역할별 로그인에서는 다른 역할 계정을 거부한다", async () => {
+    const passwordHash = await hash("admin", 4);
+    const prisma = { agent: { findUnique: jest.fn().mockResolvedValue({ id: "admin-id", name: "Admin", role: "ADMIN", status: "ACTIVE", passwordHash }) } };
+    const auth = new AuthService(prisma as never);
+
+    await expect(auth.login("admin", "admin", "AGENT")).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
   /** 만료 없는 토큰이라도 계정이 삭제되거나 비활성화되면 DB 확인 단계에서 즉시 거부합니다. */
   it("현재 활성 계정이 아닌 직원 토큰을 거부한다", async () => {
     const prisma = { agent: { findUnique: jest.fn().mockResolvedValue(null) } };

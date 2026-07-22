@@ -11,16 +11,25 @@ paths:
       summary: 서버 상태 확인
       responses:
         "200": { description: 정상 }
+  /auth/login:
+    post:
+      summary: 관리자·Agent 통합 로그인과 역할 판별
+      requestBody: { $ref: "#/components/requestBodies/Login" }
+      responses:
+        "201": { description: 직원 JWT와 ADMIN 또는 AGENT 역할 발급 }
+        "401": { description: 로그인 실패 }
   /auth/agent/login:
     post:
-      summary: Agent 로그인
+      deprecated: true
+      summary: 구버전 Agent 로그인
       requestBody: { $ref: "#/components/requestBodies/Login" }
       responses:
         "201": { description: Agent JWT 발급 }
         "401": { description: 로그인 실패 }
   /auth/admin/login:
     post:
-      summary: 관리자 로그인
+      deprecated: true
+      summary: 구버전 관리자 로그인
       requestBody: { $ref: "#/components/requestBodies/Login" }
       responses:
         "201": { description: 관리자 JWT 발급 }

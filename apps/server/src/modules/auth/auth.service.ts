@@ -25,13 +25,13 @@ export class AuthService implements OnModuleInit {
   }
 
   /**
-   * 로그인 ID와 비밀번호를 확인하고 역할이 일치할 때만 JWT를 발급합니다.
+   * 로그인 ID와 비밀번호를 확인하고, 구버전 역할별 엔드포인트가 역할을 지정한 경우에는 역할 일치까지 확인한 뒤 JWT를 발급합니다.
    * 존재하지 않는 계정과 틀린 비밀번호에 같은 오류를 반환해 계정 추측을 어렵게 합니다.
    */
-  async login(loginId: string, password: string, requiredRole: "ADMIN" | "AGENT") {
+  async login(loginId: string, password: string, requiredRole?: "ADMIN" | "AGENT") {
     const agent = await this.prisma.agent.findUnique({ where: { loginId } });
-    if (!agent || agent.status !== "ACTIVE" || agent.role !== requiredRole || !(await compare(password, agent.passwordHash))) {
-      this.logger.warn(JSON.stringify({ event: "login.failed", role: requiredRole, loginId: loginId.slice(0, 30) }));
+    if (!agent || agent.status !== "ACTIVE" || (requiredRole !== undefined && agent.role !== requiredRole) || !(await compare(password, agent.passwordHash))) {
+      this.logger.warn(JSON.stringify({ event: "login.failed", role: requiredRole ?? "STAFF", loginId: loginId.slice(0, 30) }));
       throw new UnauthorizedException("로그인 정보가 올바르지 않습니다.");
     }
 

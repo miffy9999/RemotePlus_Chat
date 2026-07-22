@@ -1,23 +1,18 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { io, type Socket } from "socket.io-client";
-import { acceptSession, closeSession, createAdminAgent, createHotel, createRoom, deleteAdminAgent, deleteHotel, deleteRoom, getMessages, listAdminAgents, listHotels, listRooms, listSessions, login, loginAdmin, type AdminAgentView, type HotelView, type MessageView, type RoomView, type SessionView, SOCKET_URL } from "./api";
+import { acceptSession, closeSession, createAdminAgent, createHotel, createRoom, deleteAdminAgent, deleteHotel, deleteRoom, getMessages, listAdminAgents, listHotels, listRooms, listSessions, loginStaff, type AdminAgentView, type HotelView, type MessageView, type RoomView, type SessionView, SOCKET_URL } from "./api";
 import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
 import { LanguageProvider, LanguageSwitcher, useI18n } from "./i18n";
 import { AUTH_INVALID_EVENT, clearStoredAuth, readStoredAuth, saveStoredAuth, type AgentAuth } from "./auth-storage";
 import { createRoomQrDataUrl, createRoomQrFileName, downloadRoomQr } from "./qr-code";
 import { findNewWaitingSessions, notificationPreview, readNotificationSoundEnabled, saveNotificationSoundEnabled, sortSessionsByRecentActivity, waitingSessionIds } from "./notification-utils";
 import { createTitleFlasher, type TitleFlasher } from "./title-flasher";
+import { staffHomePath } from "./staff-routing";
 import "./styles.css";
 
-/** 기본 진입 화면에서 사용자가 자신의 역할을 먼저 선택해 관리자와 Agent 인증 흐름을 명확히 구분합니다. */
-function RoleSelection(): React.JSX.Element {
-  const { t } = useI18n();
-  return <div className="role-shell"><LanguageSwitcher/><main className="role-card"><div className="brand dark">REMOTE<span>+</span></div><h1>{t("호텔 상담 센터")}</h1><p>{t("이용할 업무 화면을 선택한 뒤 로그인하세요.")}</p><div className="role-actions"><Link className="role-action admin" to="/admin/login"><strong>{t("관리자 로그인")}</strong><span>{t("호텔·룸·Agent를 관리합니다.")}</span></Link><Link className="role-action agent" to="/login"><strong>{t("Agent 로그인")}</strong><span>{t("투숙객 상담을 처리합니다.")}</span></Link></div></main></div>;
-}
-
-/** 실제 Agent API를 호출하는 로그인 화면입니다. */
+/** 한 로그인 폼에서 서버가 판별한 직원 역할에 따라 관리자 또는 Agent 업무 화면으로 이동합니다. */
 function LoginPage({ onLogin }: { onLogin: (auth: AgentAuth) => void }): React.JSX.Element {
   const { t } = useI18n();
   const [loginId, setLoginId] = useState("agent01");
@@ -28,12 +23,17 @@ function LoginPage({ onLogin }: { onLogin: (auth: AgentAuth) => void }): React.J
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault(); setLoading(true); setError("");
-    try { const auth = await login(loginId, password); saveStoredAuth(auth); onLogin(auth); navigate("/agent"); }
+    try {
+      const auth = await loginStaff(loginId, password);
+      // 이전 역할로 로그인했던 탭의 인증을 함께 남기지 않아 보호 경로가 오래된 역할을 선택하는 일을 막습니다.
+      clearStoredAuth(auth.agent.role === "ADMIN" ? "AGENT" : "ADMIN");
+      saveStoredAuth(auth); onLogin(auth); navigate(staffHomePath(auth.agent.role));
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : "로그인에 실패했습니다."); }
     finally { setLoading(false); }
   }
 
-  return <div className="login-shell"><LanguageSwitcher/><form className="login-card" onSubmit={submit}><div className="brand dark">REMOTE<span>+</span></div><h1>{t("Agent 로그인")}</h1><p>{t("상담 센터 계정으로 로그인하세요.")}</p><label>{t("로그인 ID")}<input value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="username" /></label><label>{t("비밀번호")}<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>{error && <div className="error-box">{error}</div>}<button disabled={loading}>{t(loading ? "로그인 중…" : "로그인")}</button><small>{t("개발용 계정은 `.env.example`에서 확인할 수 있습니다.")}</small></form></div>;
+  return <div className="login-shell"><LanguageSwitcher/><form className="login-card" onSubmit={submit}><div className="brand dark">REMOTE<span>+</span></div><h1>{t("직원 로그인")}</h1><p>{t("상담 센터 계정으로 로그인하세요.")}</p><label>{t("로그인 ID")}<input value={loginId} onChange={(e) => setLoginId(e.target.value)} autoComplete="username" /></label><label>{t("비밀번호")}<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" /></label>{error && <div className="error-box">{error}</div>}<button disabled={loading}>{t(loading ? "로그인 중…" : "로그인")}</button><small>{t("계정 역할에 따라 관리 또는 상담 화면으로 이동합니다.")}</small></form></div>;
 }
 
 /** 선택한 상담에 Socket.IO로 연결하고 메시지 이력·전송·종료를 처리합니다. */
@@ -280,9 +280,6 @@ function SessionTable({ items, action }: { items: SessionView[]; action: (sessio
 /** 사용자가 알림음을 켠 경우에만 짧은 시험·수신음을 재생하고 완료 뒤 오디오 자원을 해제합니다. */
 function playNotificationSound(): void { try { const context = new AudioContext(); const oscillator = context.createOscillator(); oscillator.connect(context.destination); oscillator.frequency.value = 880; oscillator.onended = () => void context.close(); oscillator.start(); oscillator.stop(context.currentTime + 0.12); } catch { /* 소리가 차단되어도 화면 팝업은 항상 유지됩니다. */ } }
 
-/** 관리자 전용 로그인은 Agent 토큰과 다른 저장 키를 사용해 역할 화면이 섞이지 않게 합니다. */
-function AdminLogin({ onLogin }: { onLogin: (auth: AgentAuth) => void }): React.JSX.Element { const {t}=useI18n(); const [loginId,setLoginId]=useState("admin"); const [password,setPassword]=useState(""); const [error,setError]=useState(""); async function submit(e:FormEvent){e.preventDefault();try{const value=await loginAdmin(loginId,password);saveStoredAuth(value);onLogin(value);}catch(reason){setError(reason instanceof Error?reason.message:"로그인에 실패했습니다.");}} return <div className="login-shell"><LanguageSwitcher/><form className="login-card" onSubmit={submit}><div className="brand dark">REMOTE<span>+</span></div><h1>{t("관리자 로그인")}</h1><label>{t("로그인 ID")}<input value={loginId} onChange={e=>setLoginId(e.target.value)} autoComplete="username"/></label><label>{t("비밀번호")}<input type="password" value={password} onChange={e=>setPassword(e.target.value)} autoComplete="current-password"/></label>{error&&<div className="error-box">{error}</div>}<button>{t("로그인")}</button></form></div>; }
-
 /** 관리자만 받은 투숙객 주소를 클립보드에 복사합니다. 실패하면 호출부가 화면 오류로 안내합니다. */
 async function copyGuestUrl(url: string): Promise<void> { await navigator.clipboard.writeText(url); }
 
@@ -354,7 +351,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   async function removeAgent(agent: AdminAgentView) { const message=language==="ja"?`${agent.name}（${agent.loginId}）Agentを削除しますか？既存の相談履歴は保持されます。`:`${agent.name} (${agent.loginId}) Agent를 삭제할까요? 기존 상담 기록은 유지됩니다.`; if (!window.confirm(message)) return; try { await deleteAdminAgent(auth.accessToken, agent.id); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Agent 삭제 실패"); } }
   async function removeHotel(hotel: HotelView) { const message=language==="ja"?`${hotel.name}を削除しますか？配下の客室とすべての相談・メッセージも削除され、元に戻せません。`:`${hotel.name} 호텔을 삭제할까요? 하위 룸과 모든 상담·메시지도 함께 삭제되며 복구할 수 없습니다.`; if (!window.confirm(message)) return; try { await deleteHotel(auth.accessToken, hotel.id); if (filter === hotel.id) setFilter(""); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : "호텔 삭제 실패"); } }
   async function removeRoom(room: RoomView) { const message=language==="ja"?`${room.hotel.name} ${room.roomNumber}号室を削除しますか？アクセスキーと相談・メッセージも削除され、元に戻せません。`:`${room.hotel.name} ${room.roomNumber} 룸을 삭제할까요? 접근키와 상담·메시지도 함께 삭제되며 복구할 수 없습니다.`; if (!window.confirm(message)) return; try { await deleteRoom(auth.accessToken, room.id); await refresh(); } catch (reason) { setError(reason instanceof Error ? reason.message : "룸 삭제 실패"); } }
-  function logout() { clearStoredAuth("ADMIN"); location.href = "/admin/login"; }
+  function logout() { clearStoredAuth("ADMIN"); location.href = "/login"; }
   return <div className="admin-shell"><header><div><div className="brand dark">REMOTE<span>+</span></div><h1>{t("관리자 페이지")}</h1></div><div className="admin-header-actions"><LanguageSwitcher/><button className="secondary" onClick={logout}>{t("로그아웃")}</button></div></header>{error && <div className="error-box">{error}</div>}<section className="card"><h2>{t("Agent 관리")}</h2><form className="inline-form" onSubmit={addAgent}><input aria-label={t("Agent 이름")} placeholder={t("이름")} value={agentForm.name} onChange={(e)=>setAgentForm({...agentForm,name:e.target.value})}/><input aria-label={t("Agent 로그인 ID")} placeholder={t("로그인 ID")} value={agentForm.loginId} onChange={(e)=>setAgentForm({...agentForm,loginId:e.target.value})}/><input aria-label={t("Agent 비밀번호")} type="password" placeholder={t("비밀번호")} value={agentForm.password} onChange={(e)=>setAgentForm({...agentForm,password:e.target.value})}/><button>{t("Agent 추가")}</button></form><div className="table-wrap admin-table"><table><thead><tr><th>{t("이름")}</th><th>{t("ID")}</th><th>{t("상태")}</th><th>{t("관리")}</th></tr></thead><tbody>{agents.map((agent)=><tr key={agent.id}><td data-label={t("이름")}>{agent.name}</td><td data-label={t("ID")}>{agent.loginId}</td><td data-label={t("상태")}>{agent.status}</td><td data-label={t("관리")}><button className="danger compact" onClick={() => void removeAgent(agent)}>{t("삭제")}</button></td></tr>)}</tbody></table></div></section><section className="card"><h2>{t("호텔·룸 관리")}</h2>{hotelError && <div className="error-box form-error" role="alert">{hotelError}</div>}<form className="inline-form" onSubmit={addHotel}><input aria-label={t("호텔 이름")} placeholder={t("호텔 이름")} value={hotelName} onChange={(e)=>setHotelName(e.target.value)}/><button>{t("호텔 추가")}</button></form>{roomError && <div className="error-box form-error" role="alert">{roomError}</div>}<form className="inline-form" onSubmit={addRoom}><select aria-label={t("룸을 추가할 호텔")} value={roomHotelId} onChange={(e)=>setRoomHotelId(e.target.value)}>{hotels.map((hotel)=><option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select><input aria-label={t("객실 번호")} placeholder={t("객실 번호")} value={roomNumber} onChange={(e)=>setRoomNumber(e.target.value)}/><button>{t("룸 추가")}</button><button type="button" className="danger" disabled={!roomHotelId} onClick={() => { const hotel = hotels.find((item) => item.id === roomHotelId); if (hotel) void removeHotel(hotel); }}>{t("선택 호텔 삭제")}</button></form><label className="filter">{t("호텔 필터")}<select value={filter} onChange={(e)=>setFilter(e.target.value)}><option value="">{t("전체 호텔")}</option>{hotels.map((hotel)=><option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label><div className="table-wrap admin-table"><table><thead><tr><th>{t("호텔")}</th><th>{t("객실")}</th><th>{t("상태")}</th><th>{t("투숙객 주소")}</th><th>{t("QR 관리")}</th><th>{t("관리")}</th></tr></thead><tbody>{rooms.map((room)=><tr key={room.id}><td data-label={t("호텔")}>{room.hotel.name}</td><td data-label={t("객실")}>{room.roomNumber}</td><td data-label={t("상태")}>{room.status}</td><td data-label={t("투숙객 주소")} className="room-link-cell">{room.guestUrl ? <><a href={room.guestUrl} target="_blank" rel="noreferrer">{t("상담 링크 열기")}</a><button className="secondary compact" onClick={() => void copyGuestUrl(room.guestUrl!).catch(()=>setError("주소를 복사하지 못했습니다."))}>{t("주소 복사")}</button></> : <span>{t("주소 없음")}</span>}</td><td data-label={t("QR 관리")}><button type="button" className="compact" disabled={!room.guestUrl} onClick={() => setQrRoom(room)}>{t("QR 보기")}</button></td><td data-label={t("관리")}><button className="danger compact" onClick={() => void removeRoom(room)}>{t("삭제")}</button></td></tr>)}</tbody></table></div></section>{qrRoom && <RoomQrModal room={qrRoom} onClose={() => setQrRoom(null)} />}</div>;
 }
 
@@ -367,19 +364,19 @@ function Page({ auth, title, subtitle, chatMode = false, children }: React.Props
 
 /** 인증 상태에 따라 로그인과 Agent 업무 화면 접근을 분리합니다. */
 function App(): React.JSX.Element {
-  const [auth, setAuth] = useState<AgentAuth | null>(() => readStoredAuth("AGENT"));
-  const [adminAuth, setAdminAuth] = useState<AgentAuth | null>(() => readStoredAuth("ADMIN"));
+  const [staffAuth, setStaffAuth] = useState<AgentAuth | null>(() => readStoredAuth("ADMIN") ?? readStoredAuth("AGENT"));
 
   useEffect(() => {
     /** 서버가 저장된 JWT를 거부하면 오래된 인증을 남기지 않고 역할별 로그인 화면으로 되돌립니다. */
     function invalidateAuth(): void {
-      clearStoredAuth("AGENT"); clearStoredAuth("ADMIN"); setAuth(null); setAdminAuth(null);
+      clearStoredAuth("AGENT"); clearStoredAuth("ADMIN"); setStaffAuth(null);
     }
     window.addEventListener(AUTH_INVALID_EVENT, invalidateAuth);
     return () => window.removeEventListener(AUTH_INVALID_EVENT, invalidateAuth);
   }, []);
 
-  return <Routes><Route path="/" element={<RoleSelection/>}/><Route path="/login" element={auth?.agent.role==="AGENT"?<Navigate to="/agent" replace/>:<LoginPage onLogin={setAuth}/>}/><Route path="/agent" element={auth?.agent.role==="AGENT"?<AgentPage auth={auth}/>:<Navigate to="/login" replace/>}/><Route path="/admin/login" element={adminAuth?.agent.role==="ADMIN"?<Navigate to="/admin" replace/>:<AdminLogin onLogin={setAdminAuth}/>}/><Route path="/admin" element={adminAuth?.agent.role==="ADMIN"?<AdminPage auth={adminAuth}/>:<Navigate to="/admin/login" replace/>}/><Route path="*" element={<Navigate to="/" replace/>}/></Routes>;
+  const loginElement = staffAuth ? <Navigate to={staffHomePath(staffAuth.agent.role)} replace/> : <LoginPage onLogin={setStaffAuth}/>;
+  return <Routes><Route path="/" element={loginElement}/><Route path="/login" element={loginElement}/><Route path="/agent" element={staffAuth?.agent.role==="AGENT"?<AgentPage auth={staffAuth}/>:<Navigate to="/login" replace/>}/><Route path="/admin" element={staffAuth?.agent.role==="ADMIN"?<AdminPage auth={staffAuth}/>:<Navigate to="/login" replace/>}/><Route path="/admin/login" element={<Navigate to="/login" replace/>}/><Route path="*" element={<Navigate to="/" replace/>}/></Routes>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><LanguageProvider><BrowserRouter><App /></BrowserRouter></LanguageProvider></React.StrictMode>);

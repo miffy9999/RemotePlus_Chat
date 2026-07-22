@@ -1,5 +1,25 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 14:26:14 +09:00
+
+### 수정한 파일
+
+- 직원 통합 로그인 API·검증: `apps/server/src/modules/auth/auth.controller.ts`, `apps/server/src/modules/auth/auth.service.ts`, `apps/server/tests/auth-service.spec.ts`
+- 단일 로그인 화면·역할 라우팅·호환 처리: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/api.ts`, `apps/agent-web/src/api-login.test.ts`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/staff-routing.ts`, `apps/agent-web/src/staff-routing.test.ts`
+- 사양·흐름·API·UI·설계·매뉴얼·배포 안내·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/05_API_Specification.yaml`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Free_Deployment_Guide.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 관리자와 Agent 역할 선택 화면 및 별도 로그인 폼을 제거하고, 같은 로그인 ID·비밀번호 폼에서 인증 결과의 역할에 따라 관리자 또는 상담 페이지로 자동 이동합니다.
+- 프런트에서 두 역할 API를 차례로 호출하지 않고 서버의 `POST /auth/login`이 계정을 한 번 조회·검증해 무료 Render의 정상 운영 로그인 부하를 한 요청으로 제한합니다.
+- 기존 역할별 로그인 API는 이전 클라이언트 호환을 위해 유지합니다. Vercel이 Render보다 먼저 배포된 짧은 구간에만 새 엔드포인트의 404를 감지해 구버전 API로 대체합니다.
+- 로그인 성공 시 반대 역할의 현재 탭 저장값을 제거하고 실제 역할의 인증만 `sessionStorage`에 저장해 오래된 두 역할 세션이 충돌하지 않게 합니다.
+
+### 확인 방법
+
+- ADMIN·AGENT 역할 판별, 잘못된 비밀번호와 구버전 역할 제한, 역할별 화면 경로와 순차 배포 호환을 단위 테스트로 확인했습니다.
+- 서버 테스트 33개와 Agent 웹 테스트 31개, 두 패키지 타입 검사·프로덕션 빌드와 `git diff --check`가 통과했습니다.
+
 ## 2026-07-22 13:45:14 +09:00
 
 ### 수정한 파일

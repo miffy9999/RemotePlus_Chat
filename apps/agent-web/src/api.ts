@@ -1,4 +1,4 @@
-import { AUTH_INVALID_EVENT } from "./auth-storage";
+import { AUTH_INVALID_EVENT, type AgentAuth } from "./auth-storage";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:4000/api";
 
@@ -26,6 +26,11 @@ export interface MessageView {
   createdAt: string;
 }
 
+/** HTTP 상태를 보존해 인증 실패와 순차 배포 중 아직 없는 엔드포인트를 안전하게 구분합니다. */
+class ApiError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 /** 모든 REST 요청에서 오류 본문을 읽어 사용자가 이해할 수 있는 메시지로 바꿉니다. */
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const requestHeaders = new Headers(init.headers);
@@ -36,14 +41,30 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     // 장기 저장된 JWT가 만료되거나 서버에서 거부되면 화면 상태도 즉시 로그아웃으로 전환합니다.
     if (response.status === 401 && requestHeaders.has("authorization") && typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_INVALID_EVENT));
     const message = Array.isArray(body.message) ? body.message.join(", ") : body.message;
-    throw new Error(message ?? "서버 요청에 실패했습니다.");
+    throw new ApiError(message ?? "서버 요청에 실패했습니다.", response.status);
   }
   return body as T;
 }
 
-/** Agent 로그인 후 REST와 WebSocket에서 함께 사용하는 24시간 콜센터용 JWT를 반환합니다. */
-export function login(loginId: string, password: string) {
-  return request<{ accessToken: string; agent: { id: string; name: string; role: "AGENT" } }>("/auth/agent/login", { method: "POST", body: JSON.stringify({ loginId, password }) });
+/**
+ * 관리자와 Agent를 한 번에 인증하고 서버가 판별한 역할을 반환합니다.
+ * Vercel이 새 프런트를 먼저 배포한 짧은 구간에만 404를 기준으로 구버전 역할별 API를 사용합니다.
+ */
+export async function loginStaff(loginId: string, password: string): Promise<AgentAuth> {
+  const init: RequestInit = { method: "POST", body: JSON.stringify({ loginId, password }) };
+  try {
+    return await request<AgentAuth>("/auth/login", init);
+  } catch (reason) {
+    if (!(reason instanceof ApiError) || reason.status !== 404) throw reason;
+  }
+
+  // 순차 배포 호환 구간에만 구버전 Agent API를 먼저 확인하고, 인증 실패일 때 관리자 API를 한 번 더 확인합니다.
+  try {
+    return await request<AgentAuth>("/auth/agent/login", init);
+  } catch (reason) {
+    if (!(reason instanceof ApiError) || reason.status !== 401) throw reason;
+    return request<AgentAuth>("/auth/admin/login", init);
+  }
 }
 
 /** 상태 필터 없이 전체 목록을 받아 화면에서 역할과 탭에 맞게 나눕니다. */
@@ -71,8 +92,7 @@ export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? "http://127.0.0.1:4
 export interface AdminAgentView { id: string; name: string; loginId: string; role: "AGENT"; status: "ACTIVE" | "INACTIVE"; createdAt: string }
 export interface HotelView { id: string; name: string; status: "ACTIVE" | "INACTIVE"; createdAt: string }
 export interface RoomView { id: string; hotelId: string; roomNumber: string; status: "ACTIVE" | "INACTIVE"; createdAt: string; hotel: HotelView; guestUrl: string | null }
-/** 관리자 로그인과 관리 API는 ADMIN 역할 JWT를 요구해 Agent 상담 권한과 분리합니다. */
-export function loginAdmin(loginId: string, password: string) { return request<{ accessToken: string; agent: { id: string; name: string; role: "ADMIN" } }>("/auth/admin/login", { method: "POST", body: JSON.stringify({ loginId, password }) }); }
+/** 관리자 관리 API는 통합 로그인에서 받은 ADMIN 역할 JWT를 요구해 Agent 상담 권한과 분리합니다. */
 export function listAdminAgents(token: string) { return request<AdminAgentView[]>("/admin/agents", { headers: { authorization: `Bearer ${token}` } }); }
 export function createAdminAgent(token: string, input: { name: string; loginId: string; password: string }) { return request<AdminAgentView>("/admin/agents", { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ ...input, role: "AGENT" }) }); }
 /** 관리자 확인을 거친 Agent 계정을 삭제하며 기존 상담 기록은 서버가 보존합니다. */
