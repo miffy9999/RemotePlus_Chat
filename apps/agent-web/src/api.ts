@@ -8,12 +8,13 @@ export interface SessionView {
   status: "WAITING" | "ACTIVE" | "CLOSED" | "EXPIRED" | "CANCELLED" | "BLOCKED";
   language: string;
   agentId: string | null;
+  agent: { id: string; name: string } | null;
   startedAt: string | null;
   expiresAt: string;
   closedAt: string | null;
   createdAt: string;
   lastActivityAt?: string;
-  room: { roomNumber: string; hotel: { name: string } };
+  room: { roomNumber: string; hotel: { id: string; name: string } };
 }
 
 export interface MessageView {

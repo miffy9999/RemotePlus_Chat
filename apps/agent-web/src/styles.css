@@ -54,6 +54,13 @@ table { width: 100%; border-collapse: collapse; } th, td { padding: 15px 12px; t
 .empty { padding: 34px 16px !important; color: #8992a3; text-align: center; }
 .error-box { margin: 0 0 16px; padding: 12px 14px; color: #a84239; background: #fff0ee; border: 1px solid #f7d7d3; border-radius: 10px; font-size: 13px; }
 .form-error { margin: 14px 0 -4px; }
+.conversation-log-card .section-head { align-items: flex-end; }
+.compact-filter { margin: 0; }
+.conversation-log-scroll { max-height: 460px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid #edf0f4; border-radius: 10px; }
+.conversation-log-scroll .table-wrap { overflow: visible; }
+.conversation-log-scroll thead { position: sticky; z-index: 1; top: 0; }
+.log-modal { width: min(760px, 100%); max-height: calc(100dvh - 40px); display: grid; grid-template-rows: auto auto minmax(0, 1fr); overflow: hidden; padding: 26px; border-radius: 18px; background: white; box-shadow: 0 20px 50px rgba(16,27,54,.3); }
+.log-messages { min-height: 220px; margin-top: 20px; padding: 18px; overflow-y: auto; overscroll-behavior: contain; border: 1px solid #e2e7f0; border-radius: 12px; background: #fbfcfe; }
 
 /* Agent 채팅은 투숙객 채팅과 동일한 말풍선·입력창·연결 표시를 사용하되 넓은 업무 화면에 맞춥니다. */
 .chat-card { position: relative; height: calc(100vh - 145px); min-height: 560px; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; overflow: hidden; background: white; border: 1px solid #e2e7f0; border-radius: 18px; box-shadow: 0 16px 38px rgba(33,48,79,.1); }
@@ -158,6 +165,10 @@ table { width: 100%; border-collapse: collapse; } th, td { padding: 15px 12px; t
   .inline-form { display: grid; grid-template-columns: 1fr; }
   .inline-form input, .inline-form select, .inline-form button, .filter select { width: 100%; min-width: 0; }
   .filter { align-items: stretch; flex-direction: column; gap: 7px; }
+  .conversation-log-card .section-head { align-items: stretch; flex-direction: column; }
+  .conversation-log-scroll { max-height: 520px; border: 0; }
+  .conversation-log-scroll .session-table { overflow: visible; }
+  .log-modal { max-height: calc(100dvh - 20px); padding: 20px 14px; }
   .login-shell { padding: 64px 14px 20px; }
   .login-card { width: calc(100vw - 28px); min-width: 0; padding: 26px 20px; }
   .login-shell > .language-switcher { top: 14px; right: 14px; }
