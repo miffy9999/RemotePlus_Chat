@@ -4,7 +4,7 @@
 
 ### 수정한 파일
 
-- Render 실DB 계정 최종 일회성 복구: `apps/server/prisma/migrations/20260722063500_enforce_free_test_credentials/migration.sql`, `apps/server/tests/password-policy.spec.ts`
+- Render 실DB 계정 최종 일회성 복구와 배포 경로 표시: `apps/server/prisma/migrations/20260722063500_enforce_free_test_credentials/migration.sql`, `apps/server/tests/password-policy.spec.ts`, `apps/server/src/modules/auth/auth.service.ts`
 - 계정 복구 기준 문서: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/10_Decision_Log.md`, `docs/12_Free_Deployment_Guide.md`
 
 ### 수정 내용과 이유
@@ -12,6 +12,7 @@
 - 첫 복구 커밋 배포 뒤 새 `scope` API는 동작했지만 Render DB는 여전히 이전 `remote1234!` 비밀번호를 허용하고 문서의 두 비밀번호를 거부하는 것을 실서버 QA로 확인했습니다.
 - Render의 기존 Prisma 적용 이력과 다시 충돌하지 않는 최신 이름의 마이그레이션을 추가해 `admin / admin`, `agent01 / agent01` 해시를 조건 없이 한 번 갱신하고 기존 무기한 토큰도 폐기합니다.
 - 시작 시드 재설정은 계속 사용하지 않으므로 이번 마이그레이션 뒤 사용자가 변경한 비밀번호는 이후 재배포에서도 유지됩니다.
+- 마이그레이션·문서만 있는 커밋을 Render가 즉시 배포하지 않는 경로 필터 상황에서도 새 마이그레이션이 실행되도록 인증 서버 소스에 같은 운영 경계를 명시해 백엔드 재배포를 유도합니다.
 
 ### 확인 방법
 
