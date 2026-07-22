@@ -586,6 +586,8 @@ GET /api/chat-sessions/{sessionId}
 GET /api/chat-sessions/{sessionId}/messages
 ```
 
+직원 조회 권한은 관리자의 전체 상담, Agent의 담당 중 상담, 모든 직원의 완료 상담 로그에 허용한다. 다른 Agent가 담당 중인 활성 상담은 조회할 수 없다.
+
 ### 상담 종료
 
 ```http
@@ -603,6 +605,8 @@ POST /api/auth/login
 ```http
 GET /api/agent/chat-sessions
 ```
+
+목록은 전체 상담을 최근 활동 순으로 반환하며, 화면은 역할별 진행 업무와 공동 완료 로그를 분리한다. 완료 로그는 호텔별로 필터링할 수 있다.
 
 ### 상담원 수락
 

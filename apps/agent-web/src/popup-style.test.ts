@@ -9,7 +9,7 @@ describe("Agent 화면 레이아웃과 팝업 CSS 격리", () => {
   it("기능 없는 사이드바를 렌더링하지 않고 언어 선택을 상단 동작에 유지한다", () => {
     expect(mainSource).not.toContain("<aside>");
     expect(mainSource).not.toContain('t("Agent 상담")');
-    expect(mainSource).toContain('<div className="agent-header-actions"><LanguageSwitcher/>');
+    expect(mainSource).toMatch(/<div className="agent-header-actions">\s*<LanguageSwitcher\s*\/>/);
     expect(styles).not.toContain(".shell > aside");
   });
 

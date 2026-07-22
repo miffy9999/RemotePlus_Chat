@@ -25,6 +25,26 @@
 
 - 로그인 ID 빈 초기값, 현재·빈 비밀번호 검증, bcrypt 변경, 토큰 버전 폐기, UI 입력 확인과 30일 보존 조건을 회귀 테스트로 확인했습니다.
 - 서버 테스트 38개와 Agent 웹 테스트 35개, 두 패키지 타입 검사·프로덕션 빌드와 `git diff --check`가 통과했습니다.
+## 2026-07-22 14:56:01 +09:00
+
+### 수정한 파일
+
+- 공동 상담 로그 권한: `apps/server/src/modules/chat-sessions/chat-sessions.service.ts`, `apps/server/src/modules/chat-sessions/session-policy.ts`, `apps/server/tests/session-policy.spec.ts`
+- Agent·관리자 공용 로그 UI: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/api.ts`, `apps/agent-web/src/conversation-logs.ts`, `apps/agent-web/src/conversation-logs.test.ts`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/popup-style.test.ts`
+- 사양·흐름·설계·매뉴얼·기능 현황: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 종료·만료·취소·차단된 상담을 담당자와 관계없이 모든 Agent와 관리자가 메시지까지 읽을 수 있는 공동 운영 로그로 변경했습니다.
+- 타 Agent가 담당 중인 활성 상담의 조회·종료 권한은 기존대로 차단해 실시간 업무 경계를 유지합니다.
+- Agent 화면의 본인 종료 상담 10건 제한을 없애고 전체 상담 로그와 호텔별 필터를 추가했습니다.
+- 관리자 페이지 최하단에도 같은 로그 블록과 호텔 필터를 추가하고, 기록 상세는 읽기 전용 모달로 표시합니다.
+- 로그가 많아져도 페이지가 과도하게 길어지지 않도록 목록 높이를 제한하고 내부 세로 스크롤을 적용했습니다.
+
+### 확인 방법
+
+- 다른 Agent의 완료 로그 허용·진행 상담 차단 서버 정책 테스트와 완료 상태·호텔별 UI 필터 테스트를 추가했습니다.
+- 서버 35개 테스트, Agent 웹 33개 테스트, 양쪽 타입 검사와 Agent 프로덕션 빌드가 통과했습니다.
 
 ## 2026-07-22 14:26:14 +09:00
 

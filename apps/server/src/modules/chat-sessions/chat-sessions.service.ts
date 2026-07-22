@@ -2,7 +2,7 @@ import { ConflictException, Injectable, Logger, NotFoundException, OnModuleDestr
 import { PrismaService } from "../../database/prisma.service";
 import { createOpaqueToken, sha256 } from "../../common/security/hash";
 import type { GuestAccessPayload, StaffTokenPayload } from "../auth/auth.types";
-import { assertCanAccept, assertCanClose, isSessionExpired } from "./session-policy";
+import { assertCanAccept, assertCanClose, canStaffReadSession, isSessionExpired } from "./session-policy";
 import { Prisma, type ChatSessionStatus } from "@prisma/client";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 
@@ -158,8 +158,9 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     return deleted.count;
   }
 
-  private assertCanRead(session: { guestTokenHash: string; agentId: string | null }, staff: StaffTokenPayload | null, guestToken?: string): void {
-    if (staff?.role === "ADMIN" || (staff?.role === "AGENT" && staff.sub === session.agentId)) return;
+  private assertCanRead(session: { guestTokenHash: string; agentId: string | null; status: string }, staff: StaffTokenPayload | null, guestToken?: string): void {
+    // 완료 상담은 공동 운영 기록이므로 모든 Agent가 읽을 수 있지만 진행 중 상담의 담당자 경계는 그대로 유지합니다.
+    if (staff && canStaffReadSession(session.status, session.agentId, staff.sub, staff.role === "ADMIN")) return;
     if (guestToken && sha256(guestToken) === session.guestTokenHash) return;
     throw new UnauthorizedException("이 상담을 조회할 권한이 없습니다.");
   }
