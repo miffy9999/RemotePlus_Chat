@@ -1,5 +1,23 @@
 # 프로젝트 변경 이력
 
+## 2026-07-22 15:35:20 +09:00
+
+### 수정한 파일
+
+- Render 실DB 계정 최종 일회성 복구: `apps/server/prisma/migrations/20260722063500_enforce_free_test_credentials/migration.sql`, `apps/server/tests/password-policy.spec.ts`
+- 계정 복구 기준 문서: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/10_Decision_Log.md`, `docs/12_Free_Deployment_Guide.md`
+
+### 수정 내용과 이유
+
+- 첫 복구 커밋 배포 뒤 새 `scope` API는 동작했지만 Render DB는 여전히 이전 `remote1234!` 비밀번호를 허용하고 문서의 두 비밀번호를 거부하는 것을 실서버 QA로 확인했습니다.
+- Render의 기존 Prisma 적용 이력과 다시 충돌하지 않는 최신 이름의 마이그레이션을 추가해 `admin / admin`, `agent01 / agent01` 해시를 조건 없이 한 번 갱신하고 기존 무기한 토큰도 폐기합니다.
+- 시작 시드 재설정은 계속 사용하지 않으므로 이번 마이그레이션 뒤 사용자가 변경한 비밀번호는 이후 재배포에서도 유지됩니다.
+
+### 확인 방법
+
+- bcrypt 해시·토큰 버전 증가·조건 없는 갱신을 자동 테스트하고 서버 타입 검사·빌드를 실행합니다.
+- 배포 뒤 두 새 비밀번호가 성공하고 이전 `remote1234!`가 두 계정 모두에서 거부되는지 실서버에서 확인합니다.
+
 ## 2026-07-22 15:22:11 +09:00
 
 ### 수정한 파일
