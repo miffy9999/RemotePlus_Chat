@@ -21,6 +21,7 @@ export function canStaffReadSession(status: string, assignedAgentId: string | nu
 }
 
 /** 화면 타이머가 아니라 서버 시각으로 만료 여부를 판단합니다. 같은 시각도 이미 만료된 것으로 처리합니다. */
-export function isSessionExpired(expiresAt: Date, now: Date = new Date()): boolean {
-  return expiresAt.getTime() <= now.getTime();
+export function isSessionExpired(expiresAt: Date | null, now: Date = new Date()): boolean {
+  // WAITING은 수락 전까지 expiresAt이 null이며 상담 제한 시간 만료 대상으로 보지 않습니다.
+  return expiresAt !== null && expiresAt.getTime() <= now.getTime();
 }

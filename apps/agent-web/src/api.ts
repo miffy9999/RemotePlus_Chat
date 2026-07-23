@@ -16,7 +16,7 @@ export interface SessionView {
   agentId: string | null;
   agent: { id: string; name: string } | null;
   startedAt: string | null;
-  expiresAt: string;
+  expiresAt: string | null;
   closedAt: string | null;
   createdAt: string;
   lastActivityAt?: string;

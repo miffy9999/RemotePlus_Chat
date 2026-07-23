@@ -1,5 +1,30 @@
 # 프로젝트 변경 이력
 
+## 2026-07-23 11:18:21 +09:00
+
+### 수정한 파일
+
+- 고객 종료 API·상담 시간 기준·마이그레이션·수명주기 테스트: `apps/server/prisma/schema.prisma`, `apps/server/prisma/migrations/20260723090000_start_timer_on_accept/migration.sql`, `apps/server/src/modules/chat-sessions/*`, `apps/server/src/modules/messages/*`, `apps/server/tests/chat-session-lifecycle.spec.ts`, `apps/server/tests/session-policy.spec.ts`, `apps/server/tests/message-policy.spec.ts`, `tests/integration/verify-phase45.ts`
+- 직원 공용 상태 이벤트와 Agent 즉시 갱신: `apps/server/src/modules/realtime/chat.gateway.ts`, `apps/agent-web/src/main.tsx`, `apps/agent-web/src/api.ts`
+- Edge 서비스 워커 알림과 회귀 테스트: `apps/agent-web/src/browser-notifications.ts`, `apps/agent-web/src/browser-notifications.test.ts`, `apps/agent-web/public/notification-sw.js`, `apps/agent-web/src/i18n.tsx`
+- 고객 모바일 종료 UI·대기 복구·다국어·테스트: `apps/guest-web/src/api.ts`, `apps/guest-web/src/main.tsx`, `apps/guest-web/src/styles.css`, `apps/guest-web/src/i18n.tsx`, `apps/guest-web/src/guest-access-storage.ts`, `apps/guest-web/src/guest-access-storage.test.ts`
+- README·기준 사양·사용자 흐름·DB·UI·시스템·분석·결정·사용 매뉴얼·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/04_Database_Design.md`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/09_Analysis_Roadmap.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 고객 화면에 토큰 검증형 `상담 종료` API와 앱 내부 확인창을 추가했습니다. 브라우저 탭 닫기·새로고침·모바일 망 전환은 실제 종료와 구분할 수 있으므로 자동 종료하지 않고 명시적 버튼만 종료로 처리합니다.
+- 인증된 직원 소켓을 공용 운영 방에 참가시켜 고객 종료·상담 수락·자동 만료 상태를 모든 Agent 목록에 즉시 전파합니다. 열린 담당 채팅은 기존 상담 방 이벤트로 바로 읽기 전용 종료 화면으로 바뀌고, 목록은 5초 폴링을 기다리지 않고 해당 행을 제거합니다.
+- WAITING의 `expiresAt`을 null로 바꾸고 Agent 수락 갱신에서 `startedAt`과 정확히 15분 뒤 `expiresAt`을 함께 설정했습니다. 배포 마이그레이션은 기존 WAITING과 ACTIVE 행을 새 기준으로 보정합니다.
+- Edge에서 직접 `new Notification()` 경로가 표시되지 않는 환경을 보완하기 위해 HTTPS 서비스 워커 등록과 `showNotification()`을 우선 사용하고, 권한 차단·등록 실패 안내를 추가했습니다. 앱 팝업·제목 깜빡임·선택형 알림음은 브라우저 시스템 알림 실패와 독립적으로 유지합니다.
+- 무료 Vercel·Render 부하를 늘리는 Web Push 구독·외부 푸시 서버는 추가하지 않았으며 기존 Socket.IO 이벤트와 정적 서비스 워커만 사용합니다.
+
+### 확인 방법
+
+- 서버 14개 테스트 스위트 52개, Guest 14개, Agent 50개 테스트를 통과했습니다.
+- 전체 TypeScript 검사, 서버·Agent·Guest 프로덕션 빌드와 `git diff --check`를 통과했습니다.
+- 배포 후 고객 WAITING 화면에서 시간 표시가 `수락 후 15:00`인지, Agent 수락 직후 양쪽 타이머가 15분부터 시작하는지, 고객 종료 직후 Agent 열린 화면과 목록이 바뀌는지 확인합니다.
+- Edge의 HTTPS Agent 주소에서 `브라우저 알림 켜기`를 눌러 허용한 뒤 탭을 백그라운드로 보내 새 상담·고객 메시지 운영체제 알림을 확인합니다.
+
 ## 2026-07-22 22:05:16 +09:00
 
 ### 수정한 파일

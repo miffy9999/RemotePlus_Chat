@@ -1,7 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:4000/api";
 export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? "http://127.0.0.1:4000/chat";
 
-export interface GuestSession { id: string; status: "WAITING" | "ACTIVE" | "CLOSED" | "EXPIRED"; language: string; startedAt: string | null; expiresAt: string; closedAt: string | null; room: { roomNumber: string; hotel: { name: string } }; }
+export interface GuestSession { id: string; status: "WAITING" | "ACTIVE" | "CLOSED" | "EXPIRED"; language: string; startedAt: string | null; expiresAt: string | null; closedAt: string | null; room: { roomNumber: string; hotel: { name: string } }; }
 export interface GuestMessage { id: string; sessionId: string; senderType: "GUEST" | "AGENT" | "SYSTEM"; senderId: string | null; clientMessageId: string; content: string; createdAt: string; }
 export interface StoredGuestAccess { session: GuestSession; guestToken: string; }
 
@@ -26,3 +26,5 @@ export function createSession(accessToken: string, language: string) { return re
 export function getSession(sessionId: string, guestToken: string) { return request<GuestSession>(`/chat-sessions/${sessionId}`, { headers: { "x-guest-token": guestToken } }); }
 /** 재연결 시 데이터베이스에 저장된 메시지 이력을 복구합니다. */
 export function getMessages(sessionId: string, guestToken: string) { return request<GuestMessage[]>(`/chat-sessions/${sessionId}/messages`, { headers: { "x-guest-token": guestToken } }); }
+/** 고객이 종료 버튼을 확인했을 때 서버 상태와 Agent 화면을 즉시 CLOSED로 전환합니다. */
+export function closeGuestSession(sessionId: string, guestToken: string) { return request<GuestSession>(`/chat-sessions/${sessionId}/guest-close`, { method: "POST", headers: { "x-guest-token": guestToken } }); }

@@ -17,7 +17,8 @@ export function validateMessageInput(input: { sessionId?: unknown; clientMessage
 }
 
 /** ACTIVE 상태가 아니거나 서버 시각상 만료된 상담에는 메시지를 저장하지 않습니다. */
-export function assertSessionWritable(status: string, expiresAt: Date, now: Date = new Date()): void {
+export function assertSessionWritable(status: string, expiresAt: Date | null, now: Date = new Date()): void {
   if (status !== "ACTIVE") throw new ConflictException("진행 중인 상담에서만 메시지를 보낼 수 있습니다.");
+  if (!expiresAt) throw new ConflictException("상담 제한 시간이 설정되지 않았습니다.");
   if (expiresAt.getTime() <= now.getTime()) throw new ConflictException("상담 제한 시간이 만료되었습니다.");
 }

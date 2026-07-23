@@ -34,6 +34,12 @@ export class ChatSessionsController {
   async close(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request) {
     return this.sessions.close(id, await requireStaff(request, this.auth, ["AGENT", "ADMIN"]));
   }
+
+  /** 해당 상담의 투숙객 토큰으로 고객이 직접 상담을 종료합니다. */
+  @Post(":sessionId/guest-close")
+  closeByGuest(@Param("sessionId", new ParseUUIDPipe()) id: string, @Headers("x-guest-token") guestToken?: string) {
+    return this.sessions.closeByGuest(id, guestToken);
+  }
 }
 
 /** Agent 전용 목록과 수락 API를 별도 경로로 분리해 권한 경계를 분명히 합니다. */

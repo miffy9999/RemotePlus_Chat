@@ -28,7 +28,7 @@ async function main(): Promise<void> {
     checks.hotelFilter = filtered.status === 200 && filtered.body.length === 1 && filtered.body[0].id === room.body.id;
 
     // 만료 작업 검증용 세션은 DB에 직접 준비하되 서비스가 5초 주기로 상태를 바꾸는지만 API로 관찰한다.
-    const session = await prisma.chatSession.create({ data: { roomId: room.body.id, language: "ko", guestTokenHash: `phase45-${suffix}`, expiresAt: new Date(Date.now() - 1000) } });
+    const session = await prisma.chatSession.create({ data: { roomId: room.body.id, status: "ACTIVE", agentId: agent.body.id, language: "ko", guestTokenHash: `phase45-${suffix}`, startedAt: new Date(Date.now() - 16 * 60 * 1000), expiresAt: new Date(Date.now() - 1000) } });
     createdIds.session = session.id; await new Promise((resolve) => setTimeout(resolve, 6_000));
     const expired = await prisma.chatSession.findUnique({ where: { id: session.id } });
     checks.automaticExpiration = expired?.status === "EXPIRED" && expired.closeReason === "TIME_LIMIT";

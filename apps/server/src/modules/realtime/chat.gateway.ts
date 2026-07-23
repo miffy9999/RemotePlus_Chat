@@ -1,6 +1,6 @@
 import { HttpException, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import { ConnectedSocket, MessageBody, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from "@nestjs/websockets";
+import { ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
 import { CHAT_EVENTS } from "@hotel-chat/shared";
 import { AuthService } from "../auth/auth.service";
@@ -16,7 +16,7 @@ import { FixedWindowRateLimiter } from "../../common/security/fixed-window-rate-
   // REST와 동일하게 두 로컬 호스트 표기를 허용해 브라우저별 주소 차이로 연결이 막히지 않게 합니다.
   cors: { origin: allowedWebOrigins(), credentials: true },
 })
-export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
+export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   private server!: Server;
 
@@ -52,6 +52,12 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
         next(error);
       }
     });
+  }
+
+  /** 인증된 직원 소켓을 공용 운영 방에 넣어 고객 종료·수락 상태를 모든 Agent 목록에 즉시 전달합니다. */
+  handleConnection(socket: Socket): void {
+    const identity = socket.data.identity as RealtimeIdentity | undefined;
+    if (identity?.kind === "staff") void socket.join(this.staffRoom());
   }
 
   /**
@@ -96,12 +102,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
   @OnEvent("chat.session.updated")
   sessionUpdated(session: { id: string }): void {
     this.server.to(this.room(session.id)).emit(CHAT_EVENTS.sessionUpdated, session);
+    this.server.to(this.staffRoom()).emit(CHAT_EVENTS.sessionUpdated, session);
   }
 
   /** 수동 종료 또는 만료를 양쪽에 즉시 알리고 이후 입력 차단 UI가 전환될 수 있게 합니다. */
   @OnEvent("chat.session.closed")
   sessionClosed(session: { id: string }): void {
     this.server.to(this.room(session.id)).emit(CHAT_EVENTS.sessionClosed, session);
+    this.server.to(this.staffRoom()).emit(CHAT_EVENTS.sessionClosed, session);
   }
 
   private identity(socket: Socket): RealtimeIdentity {
@@ -111,6 +119,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
   }
 
   private room(sessionId: string): string { return `session:${sessionId}`; }
+  private staffRoom(): string { return "staff:all"; }
 
   private emitError(socket: Socket, error: unknown) {
     const message = error instanceof HttpException ? String(error.getResponse() instanceof Object ? (error.getResponse() as any).message : error.message) : error instanceof Error ? error.message : "채팅 처리 중 오류가 발생했습니다.";

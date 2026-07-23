@@ -93,7 +93,8 @@ model ChatSession {
   language    String            @default("ko")
   guestTokenHash String         @unique
   startedAt   DateTime?
-  expiresAt   DateTime
+  // 대기 시간은 상담 제한 시간에 포함하지 않으므로 Agent 수락 전에는 만료 시각이 없습니다.
+  expiresAt   DateTime?
   closedAt    DateTime?
   closeReason String?
   createdAt   DateTime          @default(now())

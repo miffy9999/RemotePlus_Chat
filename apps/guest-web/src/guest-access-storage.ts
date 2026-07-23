@@ -16,7 +16,7 @@ function isStoredGuestAccess(value: unknown): value is StoredGuestAccess {
     && typeof candidate.session === "object" && candidate.session !== null
     && typeof candidate.session.id === "string" && candidate.session.id.length > 0
     && typeof candidate.session.status === "string"
-    && typeof candidate.session.expiresAt === "string";
+    && (typeof candidate.session.expiresAt === "string" || candidate.session.expiresAt === null);
 }
 
 /**
@@ -30,9 +30,10 @@ export function readStoredGuestAccess(accessKey: string, storage: Storage = loca
   try {
     const parsed: unknown = JSON.parse(raw);
     if (isStoredGuestAccess(parsed)) {
-      const expiresAt = new Date(parsed.session.expiresAt).getTime();
       const terminal = parsed.session.status === "CLOSED" || parsed.session.status === "EXPIRED";
-      if (!terminal && Number.isFinite(expiresAt) && expiresAt > nowMs) return parsed;
+      const waiting = parsed.session.status === "WAITING" && parsed.session.expiresAt === null;
+      const expiresAt = parsed.session.expiresAt ? new Date(parsed.session.expiresAt).getTime() : Number.NaN;
+      if (!terminal && (waiting || (Number.isFinite(expiresAt) && expiresAt > nowMs))) return parsed;
     }
   } catch { /* 아래 공통 정리에서 손상된 JSON을 제거합니다. */ }
   storage.removeItem(key);

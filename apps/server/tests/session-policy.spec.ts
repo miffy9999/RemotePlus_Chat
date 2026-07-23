@@ -40,4 +40,9 @@ describe("상담 상태 전환 정책", () => {
     expect(isSessionExpired(now, now)).toBe(true);
     expect(isSessionExpired(new Date(now.getTime() + 1), now)).toBe(false);
   });
+
+  /** Agent 수락 전 WAITING 상담의 null 만료 시각은 15분 제한 대상으로 취급하지 않습니다. */
+  it("수락 전 상담은 만료되지 않는다", () => {
+    expect(isSessionExpired(null, new Date("2026-07-23T00:00:00.000Z"))).toBe(false);
+  });
 });

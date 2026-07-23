@@ -24,5 +24,6 @@ describe("메시지 서버 검증 정책", () => {
     const now = new Date("2026-07-19T08:00:00.000Z");
     expect(() => assertSessionWritable("CLOSED", new Date(now.getTime() + 1000), now)).toThrow(ConflictException);
     expect(() => assertSessionWritable("ACTIVE", now, now)).toThrow(ConflictException);
+    expect(() => assertSessionWritable("ACTIVE", null, now)).toThrow(ConflictException);
   });
 });

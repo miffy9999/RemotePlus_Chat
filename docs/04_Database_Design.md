@@ -25,7 +25,7 @@
 
 ## Phase 1 시간 규칙
 
-상담 생성 시 `expiresAt`을 생성 시각에서 15분 뒤로 기록한다. Agent 수락 시 `startedAt`을 기록하지만 만료 시각을 연장하지 않는다.
+상담 생성 시 `expiresAt`은 `null`로 두어 대기 시간을 제한 시간에 포함하지 않는다. Agent 수락 시 동일 갱신에서 `startedAt`과 `expiresAt = startedAt + 15분`을 기록한다. 기존 WAITING 데이터는 배포 마이그레이션에서 `expiresAt = null`로 보정하고, 기존 ACTIVE 데이터는 `startedAt + 15분`으로 보정한다.
 
 ## 상담 기록 보존 규칙
 

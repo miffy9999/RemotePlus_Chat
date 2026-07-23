@@ -57,6 +57,7 @@ import {
 import { createTitleFlasher, type TitleFlasher } from "./title-flasher";
 import { staffHomePath } from "./staff-routing";
 import { filterConversationLogs } from "./conversation-logs";
+import { browserNotificationsSupported, prepareNotificationServiceWorker, requestBrowserNotificationPermission, showBrowserNotification } from "./browser-notifications";
 import {
   readLoginPreference,
   requestBrowserCredentialSave,
@@ -305,7 +306,7 @@ function AgentChat({
               ● {t(connection)}
             </span>
             <strong>
-              {session.status === "ACTIVE"
+              {session.status === "ACTIVE" && session.expiresAt
                 ? remainingTime(session.expiresAt, now)
                 : t("종료")}
             </strong>
@@ -391,29 +392,6 @@ interface AgentNotice {
   actionLabel?: string;
 }
 
-/** 화면을 보고 있지 않아도 새 상담을 알아볼 수 있도록 권한이 허용된 경우에만 운영체제 알림을 띄웁니다. */
-function showSystemNotification(
-  title: string,
-  body: string,
-  tag: string,
-): void {
-  if (
-    !("Notification" in window) ||
-    Notification.permission !== "granted" ||
-    document.visibilityState !== "hidden"
-  )
-    return;
-  try {
-    const notification = new Notification(title, { body, tag });
-    notification.onclick = () => {
-      window.focus();
-      notification.close();
-    };
-  } catch {
-    /* 브라우저 알림 실패와 관계없이 화면 팝업은 계속 표시됩니다. */
-  }
-}
-
 /** 하나의 최신 알림만 8초 동안 보여줘 연속 메시지가 상담 화면을 가득 덮지 않도록 합니다. */
 function AgentNoticePopup({
   notice,
@@ -475,7 +453,7 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const [notificationPermission, setNotificationPermission] = useState<
     NotificationPermission | "unsupported"
   >(() =>
-    typeof Notification === "undefined"
+    !browserNotificationsSupported()
       ? "unsupported"
       : Notification.permission,
   );
@@ -514,7 +492,7 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     setNotice(nextNotice);
     if (soundEnabledRef.current) playNotificationSound();
     titleFlasherRef.current?.start(nextNotice.title);
-    showSystemNotification(nextNotice.title, nextNotice.body, nextNotice.id);
+    void showBrowserNotification(nextNotice.title, nextNotice.body, nextNotice.id, !soundEnabledRef.current);
   }
 
   async function refresh(): Promise<void> {
@@ -610,11 +588,23 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         body: `${session.room.hotel.name} · ${session.room.roomNumber}${language === "ja" ? "号室" : "호"} · ${notificationPreview(message.content)}`,
       });
     });
+    // 고객 종료와 다른 Agent의 수락을 폴링보다 먼저 받아 열린 목록에서 즉시 제거·갱신합니다.
+    socket.on("chat:session-closed", (updated: SessionView) => {
+      activeSessionsRef.current.delete(updated.id);
+      setSessions((items) => items.filter((item) => item.id !== updated.id));
+      void refreshConversationLogs();
+    });
+    socket.on("chat:session-updated", () => void refresh());
     return () => {
       socket.disconnect();
       notificationSocketRef.current = null;
     };
   }, [auth.accessToken, language, t]);
+
+  useEffect(() => {
+    // 이미 권한이 허용된 Edge 재방문에서도 서비스 워커를 미리 준비해 첫 알림을 놓치지 않습니다.
+    if (notificationPermission === "granted") void prepareNotificationServiceWorker();
+  }, [notificationPermission]);
 
   useEffect(() => {
     void refresh();
@@ -669,15 +659,17 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   }
 
   async function enableBrowserNotifications(): Promise<void> {
-    if (!("Notification" in window)) return;
-    const permission = await Notification.requestPermission();
+    const permission = await requestBrowserNotificationPermission();
     setNotificationPermission(permission);
     if (permission === "granted") {
+      const registration = await prepareNotificationServiceWorker();
       setNotice({
         id: `permission-${Date.now()}`,
         title: t("브라우저 알림이 켜졌습니다."),
-        body: t("탭이 백그라운드여도 새 상담과 메시지를 알려드립니다."),
+        body: t(registration ? "탭이 백그라운드여도 새 상담과 메시지를 알려드립니다." : "브라우저 알림 등록에 실패했습니다. HTTPS 주소와 사이트 알림 권한을 확인하세요."),
       });
+    } else if (permission === "denied") {
+      setNotice({ id: `permission-denied-${Date.now()}`, title: t("브라우저 알림이 차단되었습니다."), body: t("Edge 주소창의 사이트 정보에서 알림 권한을 허용한 뒤 새로고침하세요.") });
     }
   }
 
@@ -868,7 +860,7 @@ function SessionTable({
                   </span>
                 </td>
                 <td data-label={t("만료 시각")}>
-                  {new Date(session.expiresAt).toLocaleTimeString(locale)}
+                  {session.expiresAt ? new Date(session.expiresAt).toLocaleTimeString(locale) : t("수락 후 15분")}
                 </td>
                 <td data-label={t("작업")}>{action(session)}</td>
               </tr>

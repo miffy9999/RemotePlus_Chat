@@ -46,11 +46,11 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     if (existing) throw new ConflictException("이 객실에는 이미 진행 중인 상담이 있습니다.");
 
     const guestToken = createOpaqueToken();
-    const now = new Date();
     let session;
     try {
       session = await this.prisma.chatSession.create({
-        data: { roomId: guest.roomId, language, guestTokenHash: sha256(guestToken), expiresAt: new Date(now.getTime() + SESSION_DURATION_MS) },
+        // 고객이 대기한 시간은 상담 시간에서 제외하고 Agent 수락 순간에 15분 만료 시각을 기록합니다.
+        data: { roomId: guest.roomId, language, guestTokenHash: sha256(guestToken), expiresAt: null },
         include: { room: { include: { hotel: true } } },
       });
     } catch (error) {
@@ -87,7 +87,12 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
   async accept(id: string, agent: StaffTokenPayload) {
     const current = await this.findOrThrow(id);
     assertCanAccept(current.status, current.agentId);
-    const result = await this.prisma.chatSession.updateMany({ where: { id, status: "WAITING", agentId: null }, data: { status: "ACTIVE", agentId: agent.sub, startedAt: new Date() } });
+    const acceptedAt = new Date();
+    const result = await this.prisma.chatSession.updateMany({
+      where: { id, status: "WAITING", agentId: null },
+      // 수락 시각과 만료 시각을 같은 DB 갱신에 넣어 어떤 화면에서도 정확히 15분으로 보이게 합니다.
+      data: { status: "ACTIVE", agentId: agent.sub, startedAt: acceptedAt, expiresAt: new Date(acceptedAt.getTime() + SESSION_DURATION_MS) },
+    });
     if (result.count !== 1) throw new ConflictException("다른 Agent가 먼저 상담을 수락했습니다.");
     const accepted = await this.get(id, agent);
     this.logger.log(JSON.stringify({ event: "session.accepted", sessionId: id, agentId: agent.sub }));
@@ -102,6 +107,21 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     const session = await this.prisma.chatSession.update({ where: { id }, data: { status: "CLOSED", closedAt: new Date(), closeReason: "AGENT_CLOSED" }, include: { room: { include: { hotel: true } }, agent: { select: PUBLIC_AGENT_SELECT } } });
     const safe = toPublicSession(session);
     this.logger.log(JSON.stringify({ event: "session.closed", sessionId: id, actorId: requester.sub, reason: "AGENT_CLOSED" }));
+    this.events.emit("chat.session.closed", safe);
+    return safe;
+  }
+
+  /** 고객의 불투명 토큰을 재검증한 뒤 대기 또는 진행 상담을 즉시 종료합니다. */
+  async closeByGuest(id: string, guestToken?: string) {
+    const current = await this.findOrThrow(id);
+    if (!guestToken || sha256(guestToken) !== current.guestTokenHash) throw new UnauthorizedException("투숙객 채팅 인증 정보가 올바르지 않습니다.");
+    if (!["WAITING", "ACTIVE"].includes(current.status)) throw new ConflictException("이미 종료되었거나 만료된 상담입니다.");
+    // Agent 종료·자동 만료와 동시에 요청되어도 마지막 요청이 종료 사유를 덮어쓰지 않게 상태 조건을 함께 갱신합니다.
+    const result = await this.prisma.chatSession.updateMany({ where: { id, status: { in: ["WAITING", "ACTIVE"] } }, data: { status: "CLOSED", closedAt: new Date(), closeReason: "GUEST_CLOSED" } });
+    if (result.count !== 1) throw new ConflictException("이미 종료되었거나 만료된 상담입니다.");
+    const session = await this.findOrThrow(id);
+    const safe = toPublicSession(session);
+    this.logger.log(JSON.stringify({ event: "session.closed", sessionId: id, actor: "GUEST", reason: "GUEST_CLOSED" }));
     this.events.emit("chat.session.closed", safe);
     return safe;
   }
@@ -134,7 +154,7 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     let session = await this.prisma.chatSession.findUnique({ where: { id }, include: { room: { include: { hotel: true } }, agent: { select: PUBLIC_AGENT_SELECT } } });
     if (!session) throw new NotFoundException("상담 세션을 찾을 수 없습니다.");
     // Phase 4의 주기 만료 작업 전에도 늦게 도착한 API 요청이 만료 상담을 사용하지 못하도록 즉시 동기화합니다.
-    if (["WAITING", "ACTIVE"].includes(session.status) && isSessionExpired(session.expiresAt)) {
+    if (session.status === "ACTIVE" && isSessionExpired(session.expiresAt)) {
       session = await this.prisma.chatSession.update({
         where: { id },
         data: { status: "EXPIRED", closedAt: new Date(), closeReason: "TIME_LIMIT" },
@@ -145,12 +165,12 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     return session;
   }
 
-  /** 목록을 반환하기 전에 만료된 모든 쓰기 가능 상담을 한 번에 EXPIRED로 전환합니다. */
+  /** 목록을 반환하기 전에 수락 뒤 제한 시간이 지난 ACTIVE 상담을 EXPIRED로 전환합니다. */
   async expireDueSessions(): Promise<void> {
     const now = new Date();
-    const due = await this.prisma.chatSession.findMany({ where: { status: { in: ["WAITING", "ACTIVE"] }, expiresAt: { lte: now } }, select: { id: true } });
+    const due = await this.prisma.chatSession.findMany({ where: { status: "ACTIVE", expiresAt: { lte: now } }, select: { id: true } });
     for (const item of due) {
-      const result = await this.prisma.chatSession.updateMany({ where: { id: item.id, status: { in: ["WAITING", "ACTIVE"] } }, data: { status: "EXPIRED", closedAt: now, closeReason: "TIME_LIMIT" } });
+      const result = await this.prisma.chatSession.updateMany({ where: { id: item.id, status: "ACTIVE", expiresAt: { lte: now } }, data: { status: "EXPIRED", closedAt: now, closeReason: "TIME_LIMIT" } });
       if (result.count === 1) { const session = await this.findOrThrow(item.id); const safe = toPublicSession(session); this.events.emit("chat.session.closed", safe); this.logger.log(JSON.stringify({ event: "session.expired", sessionId: item.id, reason: "TIME_LIMIT" })); }
     }
   }

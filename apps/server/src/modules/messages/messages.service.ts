@@ -20,7 +20,8 @@ export class MessagesService {
     const session = await this.prisma.chatSession.findUnique({ where: { id: input.sessionId } });
     if (!session) throw new UnauthorizedException("상담 세션을 찾을 수 없습니다.");
 
-    if (session.expiresAt.getTime() <= Date.now() && ["WAITING", "ACTIVE"].includes(session.status)) {
+    const expired = session.status === "ACTIVE" && session.expiresAt !== null && session.expiresAt.getTime() <= Date.now();
+    if (expired) {
       const expired = await this.prisma.chatSession.update({
         where: { id: session.id },
         data: { status: "EXPIRED", closedAt: new Date(), closeReason: "TIME_LIMIT" },
@@ -29,7 +30,7 @@ export class MessagesService {
       // 만료를 촉발한 마지막 메시지 요청에서도 전체 화면 형식을 유지하고 인증 해시가 Socket.IO로 새지 않게 합니다.
       this.events.emit("chat.session.closed", toPublicSession(expired));
     }
-    assertSessionWritable(session.expiresAt.getTime() <= Date.now() ? "EXPIRED" : session.status, session.expiresAt);
+    assertSessionWritable(expired ? "EXPIRED" : session.status, session.expiresAt);
     this.assertSender(identity, session.id, session.agentId);
 
     const senderType = identity.kind === "guest" ? "GUEST" : "AGENT";
