@@ -51,7 +51,7 @@ paths:
         "401": { description: 키가 잘못되었거나 만료됨 }
   /chat-sessions:
     post:
-      summary: 새 WAITING 상담 생성
+      summary: expiresAt 없는 WAITING 상담과 호텔 SYSTEM 안내문 생성
       security: [{ bearerAuth: [] }]
       requestBody:
         required: false
@@ -62,7 +62,7 @@ paths:
               properties:
                 language: { type: string, enum: [ja, en, ko, zh], default: ja }
       responses:
-        "201": { description: 상담과 투숙객 불투명 토큰 }
+        "201": { description: nullable expiresAt 상담과 투숙객 불투명 토큰 }
         "409": { description: 동일 룸에 진행 가능한 상담 존재 }
   /chat-sessions/{sessionId}:
     get:
@@ -100,13 +100,29 @@ paths:
         "200": { description: 각 상담에 lastActivityAt을 포함한 최근 활동순 상담 목록 }
   /agent/chat-sessions/{sessionId}/accept:
     post:
-      summary: Agent의 WAITING 상담 수락
+      deprecated: true
+      summary: 구버전 Agent 수락 호환 경로(대화 열기와 같은 정책)
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/SessionId"
       responses:
         "201": { description: ACTIVE 상담 }
-        "409": { description: 이미 다른 Agent가 수락함 }
+        "409": { description: 이미 다른 Agent가 대화를 엶 }
+  /agent/chat-sessions/{sessionId}/open:
+    post:
+      summary: WAITING 대화 열기·Agent 원자 배정·15분 시작
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "201": { description: startedAt과 expiresAt이 설정된 ACTIVE 상담 }
+        "409": { description: 이미 다른 Agent가 대화를 엶 }
+  /admin/hotels/{hotelId}/welcome-message:
+    patch:
+      summary: 호텔별 일본어 또는 영어 Guest 첫 자동 안내문 수정
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200": { description: 수정된 호텔 }
 components:
   securitySchemes:
     bearerAuth:

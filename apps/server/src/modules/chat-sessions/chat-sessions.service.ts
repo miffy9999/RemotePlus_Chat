@@ -2,7 +2,7 @@ import { ConflictException, Injectable, Logger, NotFoundException, OnModuleDestr
 import { PrismaService } from "../../database/prisma.service";
 import { createOpaqueToken, sha256 } from "../../common/security/hash";
 import type { GuestAccessPayload, StaffTokenPayload } from "../auth/auth.types";
-import { assertCanAccept, assertCanClose, canStaffReadSession, isSessionExpired } from "./session-policy";
+import { assertCanOpen, assertCanClose, canStaffReadSession, isSessionExpired } from "./session-policy";
 import { Prisma, type ChatSessionStatus } from "@prisma/client";
 import { EventEmitter2 } from "@nestjs/event-emitter";
 
@@ -37,18 +37,36 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
    * 생성 시 발급한 투숙객 토큰 원문은 한 번만 반환하고 DB에는 해시만 저장합니다.
    */
   async create(guest: GuestAccessPayload, language: string) {
-    const accessKey = await this.prisma.roomAccessKey.findUnique({ where: { id: guest.sub } });
+    const accessKey = await this.prisma.roomAccessKey.findUnique({
+      where: { id: guest.sub },
+      include: { room: { include: { hotel: true } } },
+    });
     if (!accessKey || accessKey.roomId !== guest.roomId || accessKey.status !== "ACTIVE") throw new UnauthorizedException("객실 접근 권한이 만료되었습니다.");
 
     const existing = await this.prisma.chatSession.findFirst({ where: { roomId: guest.roomId, status: { in: ["WAITING", "ACTIVE"] } } });
     if (existing) throw new ConflictException("이 객실에는 이미 진행 중인 상담이 있습니다.");
 
     const guestToken = createOpaqueToken();
-    const now = new Date();
     let session;
     try {
       session = await this.prisma.chatSession.create({
-        data: { roomId: guest.roomId, language, guestTokenHash: sha256(guestToken), expiresAt: new Date(now.getTime() + SESSION_DURATION_MS) },
+        data: {
+          roomId: guest.roomId,
+          language,
+          guestTokenHash: sha256(guestToken),
+          // WAITING 동안은 시간 제한을 두지 않고 Agent가 처음 대화를 열 때 15분을 시작합니다.
+          expiresAt: null,
+          messages: {
+            create: {
+              senderType: "SYSTEM",
+              senderId: null,
+              clientMessageId: "hotel-welcome",
+              messageType: "SYSTEM",
+              // 영어 Guest에는 영어 원문을, 그 외 지원 언어에는 현재 MVP 기본 원문인 일본어를 저장합니다.
+              content: language === "en" ? accessKey.room.hotel.welcomeMessageEn : accessKey.room.hotel.welcomeMessage,
+            },
+          },
+        },
         include: { room: { include: { hotel: true } } },
       });
     } catch (error) {
@@ -56,7 +74,9 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new ConflictException("이 객실에는 이미 진행 중인 상담이 있습니다.");
       throw error;
     }
-    return { session: this.toPublic(session), guestToken };
+    const safe = this.toPublic(session);
+    this.events.emit("chat.inbox.updated", { sessionId: session.id, reason: "SESSION_CREATED" });
+    return { session: safe, guestToken };
   }
 
   /** 직원 또는 해당 투숙객 토큰만 상담 상세를 읽을 수 있습니다. */
@@ -67,23 +87,52 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Agent 목록은 별도 메시지 집계 없이 인덱스가 있는 최근 활동 시각으로 정렬해 무료 DB 부하를 제한합니다. */
-  async list(status?: ChatSessionStatus) {
+  async list(status: ChatSessionStatus | undefined, requester: StaffTokenPayload) {
     await this.expireDueSessions();
-    const sessions = await this.prisma.chatSession.findMany({ where: status ? { status } : undefined, include: { room: { include: { hotel: true } }, agent: true }, orderBy: [{ lastActivityAt: "desc" }, { createdAt: "desc" }] });
-    return sessions.map((session) => this.toPublic(session));
+    // Agent에게는 전체 WAITING, 본인 ACTIVE, 전체 종료 Log만 반환해 다른 Agent의 진행 상담을 목록 단계부터 차단합니다.
+    const visibility: Prisma.ChatSessionWhereInput = requester.role === "ADMIN" ? {} : {
+      OR: [
+        { status: "WAITING" },
+        { status: "ACTIVE", agentId: requester.sub },
+        { status: { in: ["CLOSED", "EXPIRED", "CANCELLED", "BLOCKED"] } },
+      ],
+    };
+    const where: Prisma.ChatSessionWhereInput = status ? { AND: [visibility, { status }] } : visibility;
+    const sessions = await this.prisma.chatSession.findMany({
+      where,
+      include: {
+        room: { include: { hotel: true } },
+        agent: true,
+        messages: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1 },
+      },
+      orderBy: [{ lastActivityAt: "desc" }, { createdAt: "desc" }],
+    });
+    return sessions.map((session) => {
+      const { messages, ...withoutMessages } = session;
+      return { ...this.toPublic(withoutMessages), lastMessage: messages[0] ?? null };
+    });
   }
 
-  /** 동시 수락 경쟁에서도 한 Agent만 성공하도록 조건부 updateMany를 사용합니다. */
-  async accept(id: string, agent: StaffTokenPayload) {
+  /** 별도 수락 화면 없이 대화를 여는 첫 Agent에게 원자 배정하고 그 순간부터 15분을 시작합니다. */
+  async open(id: string, agent: StaffTokenPayload) {
     const current = await this.findOrThrow(id);
-    assertCanAccept(current.status, current.agentId);
-    const result = await this.prisma.chatSession.updateMany({ where: { id, status: "WAITING", agentId: null }, data: { status: "ACTIVE", agentId: agent.sub, startedAt: new Date() } });
-    if (result.count !== 1) throw new ConflictException("다른 Agent가 먼저 상담을 수락했습니다.");
-    const accepted = await this.get(id, agent);
-    this.logger.log(JSON.stringify({ event: "session.accepted", sessionId: id, agentId: agent.sub }));
-    this.events.emit("chat.session.updated", accepted);
-    return accepted;
+    assertCanOpen(current.status, current.agentId, agent.sub);
+    if (current.status === "ACTIVE" && current.agentId === agent.sub) return this.toPublic(current);
+    const startedAt = new Date();
+    const result = await this.prisma.chatSession.updateMany({
+      where: { id, status: "WAITING", agentId: null },
+      data: { status: "ACTIVE", agentId: agent.sub, startedAt, expiresAt: new Date(startedAt.getTime() + SESSION_DURATION_MS) },
+    });
+    if (result.count !== 1) throw new ConflictException("다른 Agent가 먼저 대화를 열었습니다.");
+    const opened = await this.get(id, agent);
+    this.logger.log(JSON.stringify({ event: "session.opened", sessionId: id, agentId: agent.sub }));
+    this.events.emit("chat.session.updated", opened);
+    this.events.emit("chat.inbox.updated", { sessionId: id, reason: "SESSION_OPENED" });
+    return opened;
   }
+
+  /** 이전 프런트가 사용하는 수락 API도 새 대화 열기 정책으로 연결해 순차 배포 중 동작을 유지합니다. */
+  async accept(id: string, agent: StaffTokenPayload) { return this.open(id, agent); }
 
   /** 담당 Agent 또는 관리자가 상담을 종료하며 종료 이유와 시각을 함께 기록합니다. */
   async close(id: string, requester: StaffTokenPayload) {
@@ -124,7 +173,7 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     let session = await this.prisma.chatSession.findUnique({ where: { id }, include: { room: { include: { hotel: true } }, agent: true } });
     if (!session) throw new NotFoundException("상담 세션을 찾을 수 없습니다.");
     // Phase 4의 주기 만료 작업 전에도 늦게 도착한 API 요청이 만료 상담을 사용하지 못하도록 즉시 동기화합니다.
-    if (["WAITING", "ACTIVE"].includes(session.status) && isSessionExpired(session.expiresAt)) {
+    if (session.status === "ACTIVE" && isSessionExpired(session.expiresAt)) {
       session = await this.prisma.chatSession.update({
         where: { id },
         data: { status: "EXPIRED", closedAt: new Date(), closeReason: "TIME_LIMIT" },
@@ -138,9 +187,9 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
   /** 목록을 반환하기 전에 만료된 모든 쓰기 가능 상담을 한 번에 EXPIRED로 전환합니다. */
   async expireDueSessions(): Promise<void> {
     const now = new Date();
-    const due = await this.prisma.chatSession.findMany({ where: { status: { in: ["WAITING", "ACTIVE"] }, expiresAt: { lte: now } }, select: { id: true } });
+    const due = await this.prisma.chatSession.findMany({ where: { status: "ACTIVE", expiresAt: { lte: now } }, select: { id: true } });
     for (const item of due) {
-      const result = await this.prisma.chatSession.updateMany({ where: { id: item.id, status: { in: ["WAITING", "ACTIVE"] } }, data: { status: "EXPIRED", closedAt: now, closeReason: "TIME_LIMIT" } });
+      const result = await this.prisma.chatSession.updateMany({ where: { id: item.id, status: "ACTIVE", expiresAt: { lte: now } }, data: { status: "EXPIRED", closedAt: now, closeReason: "TIME_LIMIT" } });
       if (result.count === 1) { const session = await this.findOrThrow(item.id); const safe = this.toPublic(session); this.events.emit("chat.session.closed", safe); this.logger.log(JSON.stringify({ event: "session.expired", sessionId: item.id, reason: "TIME_LIMIT" })); }
     }
   }

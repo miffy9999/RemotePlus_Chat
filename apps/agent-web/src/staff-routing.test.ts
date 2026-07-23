@@ -22,9 +22,17 @@ describe("직원 역할별 로그인 이동", () => {
     expect(mainSource).toContain("loginStaff(loginId, password)");
   });
 
-  /** 특정 테스트 Agent ID가 공용 로그인 화면에 자동 노출되는 회귀를 막습니다. */
-  it("로그인 ID를 빈 값으로 시작한다", () => {
-    expect(mainSource).toContain('const [loginId, setLoginId] = useState("");');
+  /** 특정 테스트 Agent ID는 하드코딩하지 않고 사용자가 명시적으로 저장한 ID만 복원합니다. */
+  it("저장 선택이 없으면 빈 ID로 시작한다", () => {
+    expect(mainSource).toContain("useState(readLoginPreference)");
+    expect(mainSource).toContain("useState(initialPreference.loginId)");
     expect(mainSource).not.toContain('useState("agent01")');
+  });
+
+  /** 직원 토큰 저장과 별개로 ID·브라우저 비밀번호 관리자 선택을 로그인 화면에서 제공합니다. */
+  it("두 로그인 저장 버튼을 제공한다", () => {
+    expect(mainSource).toContain('t("아이디 저장")');
+    expect(mainSource).toContain('t("로그인 정보 저장")');
+    expect(mainSource).toContain('saveMode === "CREDENTIALS"');
   });
 });

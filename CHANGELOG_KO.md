@@ -1,5 +1,64 @@
 # 프로젝트 변경 이력
 
+## 2026-07-23 14:23:52 +09:00
+
+### 수정한 파일
+
+- 직원 로그인: `apps/agent-web/src/main.tsx`, `login-preferences.ts`, `login-preferences.test.ts`, `staff-routing.test.ts`, `i18n.tsx`, `styles.css`
+- 문서: `README.md`, `docs/07_UI_Structure.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용
+
+- 원격 `origin/main`의 직원 로그인 구현 중 `아이디 저장`과 `로그인 정보 저장` 기능만 현재 LINE형 Agent·Admin·Guest 작업본에 이식했다.
+- `아이디 저장`은 로그인 ID와 선택 모드만 `localStorage`에 기록하고 비밀번호는 저장하지 않는다.
+- `로그인 정보 저장`은 앱 저장소에 비밀번호를 남기지 않고 지원 브라우저의 표준 비밀번호 관리자에 저장을 요청한다.
+- 저장 모드 선택·해제, 앱 저장소에 비밀번호가 남지 않는지, 비밀번호 관리자 지원 여부와 무관하게 로그인이 계속되는지를 단위 테스트로 검증한다.
+
+### 수정 이유
+
+원격 `main`의 로그인 편의 기능과 보안 방식을 사용하되, 이번 브랜치에서 완성한 상담 정책·대시보드·LINE형 Agent UI·Guest 다국어 UI는 그대로 유지하기 위해서다.
+
+### 확인 방법
+
+- `pnpm lint`: 전체 성공.
+- `pnpm test`: 서버 42개, Agent 42개, Guest 14개 전부 성공.
+- `pnpm build`: 공유 패키지·서버·Agent 웹·Guest 웹 전체 운영 빌드 성공.
+- 기존의 “항상 빈 로그인 ID” 회귀 테스트는 저장 설정을 통한 초기화와 테스트 계정 하드코딩 방지 검사로 변경했다.
+
+## 2026-07-23 14:18:00 +09:00
+
+### 수정한 파일
+
+- DB·마이그레이션: `apps/server/prisma/schema.prisma`, `20260723090000_guest_prechat_and_hotel_welcome`, `20260723130000_hotel_english_welcome_message`
+- 상담·메시지·실시간 서버: `chat-sessions.service.ts`, `chat-sessions.controller.ts`, `session-policy.ts`, `messages.service.ts`, `message-policy.ts`, `chat.gateway.ts`, `packages/shared/src/index.ts`
+- 관리자 API: `admin.controller.ts`, `admin.service.ts`, `update-hotel-welcome-message.dto.ts`
+- 웹: Agent·Admin `api.ts`, `main.tsx`, `styles.css`, `i18n.tsx`; Guest `api.ts`, `main.tsx`, `styles.css`, `i18n.tsx`, `guest-access-storage.ts`
+- 테스트: `session-policy.spec.ts`, `message-policy.spec.ts`, `guest-access-storage.test.ts`
+- 문서: README, ROADMAP, 원본·기본 사양서, 요구사항, 흐름, DB, API, 체크리스트, UI, 설계도, 분석 로드맵, 결정 기록, 매뉴얼, 기능 현황
+
+### 수정 내용
+
+- 작업 기준 경로를 `RemotePlus_Chat`으로 바로잡고, 이 저장소에 있던 통합 로그인·비밀번호 변경·고정 QR·알림·30일 로그 정리를 보존한 채 `chat_app`의 목요일 작업을 기능 단위로 병합했다.
+- `Hotel.welcomeMessage`, `welcomeMessageEn`과 nullable `ChatSession.expiresAt`을 추가했다. WAITING은 대기 시간으로 만료하지 않고 Guest 메시지와 호텔 SYSTEM 안내문을 먼저 저장한다.
+- Agent가 LINE형 목록에서 새 문의를 열 때 담당자·시작시각·15분 만료시각을 원자 갱신한다. Current/Log, 검색·호텔·언어 필터, 한국어·일본어 UI를 적용했다.
+- 최신 원본의 새 상담·고객 메시지 팝업, 선택형 알림음, 브라우저 알림, 탭 제목 점멸을 LINE형 Agent 화면에도 연결해 UI 교체로 인한 기능 누락을 막았다.
+- 관리자 화면을 호텔·룸 관리 → 호텔별 자동 안내문 → Agent 관리 순서의 KPI 대시보드로 바꾸고 등록 호텔 빠른 선택을 추가했다.
+- Guest WAITING 노란 안내 상자와 남은 시간 표시를 제거하고 Agent 연결 전 메시지 전송을 활성화했다.
+- 기존에 수정 중이던 `docs/04_Database_Design.md`, `docs/08_System_Blueprint.md`, `docs/12_Feature_Status.md` 내용은 덮어쓰지 않고 현재 문서 위에 병합했다.
+
+### 수정 이유
+
+잘못 사용한 이전 작업 경로의 목요일 구현을 실제 저장소로 옮기면서 동료가 이미 추가한 최신 기능과 문서 변경을 잃지 않기 위해서다.
+
+### 확인 방법
+
+- `pnpm lint`: 전체 성공.
+- `pnpm test`: 서버 42개, Agent 37개, Guest 14개 전부 성공.
+- `pnpm build`: 공유 패키지·서버·Agent 웹·Guest 웹 전체 운영 빌드 성공.
+- Docker Compose 재빌드와 신규 마이그레이션 적용 성공, API `http://127.0.0.1:4100/api/health`의 서버·DB 정상 응답을 확인했다.
+- 브라우저에서 통합 로그인, 관리자 대시보드의 실제 배치, 일본어·영어 안내문 탭, LINE형 Agent 한국어·일본어 UI, Guest 일본어 기본값과 영어·한국어·중국어 전환을 확인했다.
+- Guest가 Agent 연결 전에 메시지를 전송·저장하고 Agent 목록에 즉시 나타나는지, Agent가 방을 열 때 15분이 시작되는지, Guest에는 남은 시간이 보이지 않는지 확인한 뒤 QA 상담을 정상 종료했다.
+
 ## 2026-07-22 14:35:10 +09:00
 
 ### 수정한 파일

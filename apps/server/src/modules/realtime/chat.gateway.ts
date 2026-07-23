@@ -1,6 +1,6 @@
 import { HttpException, Logger } from "@nestjs/common";
 import { OnEvent } from "@nestjs/event-emitter";
-import { ConnectedSocket, MessageBody, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from "@nestjs/websockets";
+import { ConnectedSocket, MessageBody, OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit, SubscribeMessage, WebSocketGateway, WebSocketServer } from "@nestjs/websockets";
 import type { Server, Socket } from "socket.io";
 import { CHAT_EVENTS } from "@hotel-chat/shared";
 import { AuthService } from "../auth/auth.service";
@@ -16,12 +16,13 @@ import { FixedWindowRateLimiter } from "../../common/security/fixed-window-rate-
   // REST와 동일하게 두 로컬 호스트 표기를 허용해 브라우저별 주소 차이로 연결이 막히지 않게 합니다.
   cors: { origin: allowedWebOrigins(), credentials: true },
 })
-export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
+export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   private server!: Server;
 
   private readonly logger = new Logger(ChatGateway.name);
   private readonly messageRates = new FixedWindowRateLimiter();
+  private readonly staffInboxRoom = "staff:inbox";
 
   constructor(private readonly auth: AuthService, private readonly sessions: ChatSessionsService, private readonly messages: MessagesService) {}
 
@@ -102,6 +103,18 @@ export class ChatGateway implements OnGatewayInit, OnGatewayDisconnect {
   @OnEvent("chat.session.closed")
   sessionClosed(session: { id: string }): void {
     this.server.to(this.room(session.id)).emit(CHAT_EVENTS.sessionClosed, session);
+  }
+
+  /** 인증된 직원만 내부 받은 편지함 방에 넣어 다른 객실 알림이 Guest에게 방송되지 않게 합니다. */
+  handleConnection(socket: Socket): void {
+    const identity = socket.data.identity as RealtimeIdentity | undefined;
+    if (identity?.kind === "staff") void socket.join(this.staffInboxRoom);
+  }
+
+  /** 새 상담이나 WAITING Guest 문의를 직원 전용 방에 알려 목록 폴링 전에도 갱신하게 합니다. */
+  @OnEvent("chat.inbox.updated")
+  inboxUpdated(payload: { sessionId: string; reason: string }): void {
+    this.server.to(this.staffInboxRoom).emit(CHAT_EVENTS.inboxUpdated, payload);
   }
 
   private identity(socket: Socket): RealtimeIdentity {

@@ -17,6 +17,7 @@ export const CHAT_EVENTS = {
   accepted: "chat:message-accepted",
   sessionUpdated: "chat:session-updated",
   sessionClosed: "chat:session-closed",
+  inboxUpdated: "chat:inbox-updated",
   error: "chat:error",
 } as const;
 

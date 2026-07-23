@@ -1,7 +1,7 @@
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:4000/api";
 export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? "http://127.0.0.1:4000/chat";
 
-export interface GuestSession { id: string; status: "WAITING" | "ACTIVE" | "CLOSED" | "EXPIRED"; language: string; startedAt: string | null; expiresAt: string; closedAt: string | null; room: { roomNumber: string; hotel: { name: string } }; }
+export interface GuestSession { id: string; status: "WAITING" | "ACTIVE" | "CLOSED" | "EXPIRED"; language: string; startedAt: string | null; expiresAt: string | null; closedAt: string | null; room: { roomNumber: string; hotel: { name: string } }; }
 export interface GuestMessage { id: string; sessionId: string; senderType: "GUEST" | "AGENT" | "SYSTEM"; senderId: string | null; clientMessageId: string; content: string; createdAt: string; }
 export interface StoredGuestAccess { session: GuestSession; guestToken: string; }
 

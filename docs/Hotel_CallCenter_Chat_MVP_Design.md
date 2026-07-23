@@ -13,7 +13,7 @@
 
 호텔 객실에 인쇄하여 비치한 고정 QR 코드 또는 전용 링크를 통해 투숙객이 별도의 앱 설치나 회원가입 없이 콜센터 직원과 실시간으로 채팅할 수 있도록 한다. QR 코드는 객실 생성 때 한 번 발급된 고객 전용 URL을 그대로 담으며 별도의 유효기간이나 정기 갱신을 두지 않는다.
 
-채팅 세션은 객실을 기준으로 생성하며, 한 번의 상담은 최대 15분 동안만 사용할 수 있다. 상담원이 종료하거나 제한 시간이 지나면 해당 세션에서는 더 이상 메시지를 보낼 수 없어야 한다.
+채팅 세션은 객실을 기준으로 생성한다. Guest는 Agent 배정 전 `WAITING`에서도 메시지를 보내 DB에 저장할 수 있으며 대기 시간만으로 만료되지 않는다. 15분 제한은 Agent가 대화를 처음 연 시점부터 계산하고, 상담원이 종료하거나 제한 시간이 지나면 더 이상 메시지를 보낼 수 없어야 한다.
 
 ### MVP 목표
 
@@ -376,8 +376,7 @@ BLOCKED     관리 정책에 의해 차단
 ```mermaid
 stateDiagram-v2
     [*] --> WAITING
-    WAITING --> ACTIVE: 상담원 수락
-    WAITING --> EXPIRED: 대기 중 만료
+    WAITING --> ACTIVE: Agent가 대화 열기
     ACTIVE --> CLOSED: 상담원 종료
     ACTIVE --> EXPIRED: 15분 경과
     CLOSED --> [*]
@@ -512,6 +511,8 @@ erDiagram
     HOTEL {
         uuid id PK
         string name
+        text welcomeMessage
+        text welcomeMessageEn
         string status
         datetime createdAt
     }
@@ -528,6 +529,7 @@ erDiagram
         uuid id PK
         uuid roomId FK
         string keyHash
+        string encryptedKey
         string status
         datetime expiresAt
         datetime createdAt
@@ -538,6 +540,7 @@ erDiagram
         string name
         string loginId
         string passwordHash
+        int tokenVersion
         string role
         string status
         datetime createdAt
@@ -549,10 +552,12 @@ erDiagram
         uuid agentId FK
         string status
         string language
+        string guestTokenHash
         datetime startedAt
-        datetime expiresAt
+        datetime expiresAt "nullable: WAITING은 null"
         datetime closedAt
         string closeReason
+        datetime lastActivityAt
         datetime createdAt
     }
 
@@ -616,10 +621,10 @@ POST /api/auth/login
 GET /api/agent/chat-sessions
 ```
 
-### 상담원 수락
+### Agent 대화 열기
 
 ```http
-POST /api/agent/chat-sessions/{sessionId}/accept
+POST /api/agent/chat-sessions/{sessionId}/open
 ```
 
 ### WebSocket 이벤트
@@ -630,6 +635,7 @@ chat:message
 chat:message-accepted
 chat:session-updated
 chat:session-closed
+chat:inbox-updated
 chat:error
 ```
 

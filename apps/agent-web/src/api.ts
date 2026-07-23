@@ -10,10 +10,11 @@ export interface SessionView {
   agentId: string | null;
   agent: { id: string; name: string } | null;
   startedAt: string | null;
-  expiresAt: string;
+  expiresAt: string | null;
   closedAt: string | null;
   createdAt: string;
   lastActivityAt?: string;
+  lastMessage?: MessageView | null;
   room: { roomNumber: string; hotel: { id: string; name: string } };
 }
 
@@ -87,6 +88,11 @@ export function acceptSession(token: string, sessionId: string) {
   return request<SessionView>(`/agent/chat-sessions/${sessionId}/accept`, { method: "POST", headers: { authorization: `Bearer ${token}` } });
 }
 
+/** 새 문의를 별도 수락 단계 없이 열고 첫 Agent에게 원자 배정하며 이 시점부터 15분을 시작합니다. */
+export function openSession(token: string, sessionId: string) {
+  return request<SessionView>(`/agent/chat-sessions/${sessionId}/open`, { method: "POST", headers: { authorization: `Bearer ${token}` } });
+}
+
 /** 재접속 시 DB에 저장된 메시지를 생성 순서대로 복구합니다. */
 export function getMessages(token: string, sessionId: string) {
   return request<MessageView[]>(`/chat-sessions/${sessionId}/messages`, { headers: { authorization: `Bearer ${token}` } });
@@ -100,7 +106,7 @@ export function closeSession(token: string, sessionId: string) {
 export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? "http://127.0.0.1:4000/chat";
 
 export interface AdminAgentView { id: string; name: string; loginId: string; role: "AGENT"; status: "ACTIVE" | "INACTIVE"; createdAt: string }
-export interface HotelView { id: string; name: string; status: "ACTIVE" | "INACTIVE"; createdAt: string }
+export interface HotelView { id: string; name: string; welcomeMessage: string; welcomeMessageEn: string; status: "ACTIVE" | "INACTIVE"; createdAt: string }
 export interface RoomView { id: string; hotelId: string; roomNumber: string; status: "ACTIVE" | "INACTIVE"; createdAt: string; hotel: HotelView; guestUrl: string | null }
 /** 관리자 관리 API는 통합 로그인에서 받은 ADMIN 역할 JWT를 요구해 Agent 상담 권한과 분리합니다. */
 export function listAdminAgents(token: string) { return request<AdminAgentView[]>("/admin/agents", { headers: { authorization: `Bearer ${token}` } }); }
@@ -109,6 +115,10 @@ export function createAdminAgent(token: string, input: { name: string; loginId: 
 export function deleteAdminAgent(token: string, id: string) { return request<{ deletedId: string }>(`/admin/agents/${id}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } }); }
 export function listHotels(token: string) { return request<HotelView[]>("/admin/hotels", { headers: { authorization: `Bearer ${token}` } }); }
 export function createHotel(token: string, name: string) { return request<HotelView>("/admin/hotels", { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ name }) }); }
+/** 선택 호텔의 언어별 Guest 첫 안내문을 이후 신규 상담에 적용합니다. */
+export function updateHotelWelcomeMessage(token: string, id: string, language: "ja" | "en", welcomeMessage: string) {
+  return request<HotelView>(`/admin/hotels/${id}/welcome-message`, { method: "PATCH", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ language, welcomeMessage }) });
+}
 /** 호텔과 모든 하위 룸·상담 데이터의 연쇄 삭제를 서버에 요청합니다. */
 export function deleteHotel(token: string, id: string) { return request<{ deletedId: string }>(`/admin/hotels/${id}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } }); }
 export function listRooms(token: string, hotelId?: string) { return request<RoomView[]>(`/admin/rooms${hotelId ? `?hotelId=${encodeURIComponent(hotelId)}` : ""}`, { headers: { authorization: `Bearer ${token}` } }); }

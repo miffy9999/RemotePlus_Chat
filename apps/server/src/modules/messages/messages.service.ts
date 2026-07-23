@@ -19,11 +19,12 @@ export class MessagesService {
     const session = await this.prisma.chatSession.findUnique({ where: { id: input.sessionId } });
     if (!session) throw new UnauthorizedException("상담 세션을 찾을 수 없습니다.");
 
-    if (session.expiresAt.getTime() <= Date.now() && ["WAITING", "ACTIVE"].includes(session.status)) {
+    if (session.status === "ACTIVE" && session.expiresAt && session.expiresAt.getTime() <= Date.now()) {
       const expired = await this.prisma.chatSession.update({ where: { id: session.id }, data: { status: "EXPIRED", closedAt: new Date(), closeReason: "TIME_LIMIT" } });
       this.events.emit("chat.session.closed", expired);
     }
-    assertSessionWritable(session.expiresAt.getTime() <= Date.now() ? "EXPIRED" : session.status, session.expiresAt);
+    const effectiveStatus = session.status === "ACTIVE" && session.expiresAt && session.expiresAt.getTime() <= Date.now() ? "EXPIRED" : session.status;
+    assertSessionWritable(effectiveStatus, session.expiresAt, identity.kind);
     this.assertSender(identity, session.id, session.agentId);
 
     const senderType = identity.kind === "guest" ? "GUEST" : "AGENT";
@@ -36,6 +37,8 @@ export class MessagesService {
         await transaction.chatSession.update({ where: { id: session.id }, data: { lastActivityAt: created.createdAt } });
         return created;
       });
+      // 새 WAITING 문의와 이후 Guest 메시지를 Agent 목록에 즉시 반영하되 메시지 본문은 이벤트에 싣지 않습니다.
+      if (identity.kind === "guest") this.events.emit("chat.inbox.updated", { sessionId: session.id, reason: "GUEST_MESSAGE" });
       return { message, duplicate: false };
     } catch (error) {
       // 네트워크 재전송으로 고유 제약이 충돌하면 기존 메시지를 반환해 같은 요청을 안전하게 반복할 수 있게 합니다.

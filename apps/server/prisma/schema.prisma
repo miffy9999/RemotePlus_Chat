@@ -41,11 +41,13 @@ enum MessageType {
 }
 
 model Hotel {
-  id        String       @id @default(uuid()) @db.Uuid
-  name      String
-  status    RecordStatus @default(ACTIVE)
-  createdAt DateTime     @default(now())
-  rooms     Room[]
+  id               String       @id @default(uuid()) @db.Uuid
+  name             String
+  welcomeMessage   String       @default("こんにちは。ホテルのカスタマーサポートです。ご用件をメッセージでお送りください。")
+  welcomeMessageEn String       @default("Hello. This is the hotel customer support team. Please send us your request.")
+  status           RecordStatus @default(ACTIVE)
+  createdAt        DateTime     @default(now())
+  rooms            Room[]
 }
 
 model Room {
@@ -93,7 +95,7 @@ model ChatSession {
   language    String            @default("ko")
   guestTokenHash String         @unique
   startedAt   DateTime?
-  expiresAt   DateTime
+  expiresAt   DateTime?
   closedAt    DateTime?
   closeReason String?
   createdAt   DateTime          @default(now())

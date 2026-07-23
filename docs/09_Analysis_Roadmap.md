@@ -121,8 +121,9 @@ Phase 3 화면 코드 읽기 순서:
 
 1. `apps/guest-web/src/api.ts`에서 접근 검증·세션 생성·이력 조회의 요청 헤더를 확인한다.
 2. `apps/guest-web/src/main.tsx`에서 동의, 세션 복구, WAITING/ACTIVE/CLOSED 상태 전환을 따라간다.
-3. `apps/agent-web/src/api.ts`에서 로그인·목록·수락·종료 요청을 확인한다.
-4. `apps/agent-web/src/main.tsx`에서 목록 폴링, 상담 선택, Socket.IO 메시지 병합과 종료 확인창을 읽는다.
+3. `apps/agent-web/src/api.ts`에서 통합 로그인·목록·대화 열기·종료·호텔 안내문 수정 요청을 확인한다.
+4. `apps/agent-web/src/main.tsx`에서 LINE형 Current/Log, 검색·필터, 한국어·일본어, WAITING 대화 열기와 읽기 전용 Log 분기를 읽는다.
+5. `chat-sessions.service.ts`의 nullable `expiresAt`, 호텔 SYSTEM 메시지 생성, 대화 열기 시 15분 원자 갱신을 확인한다.
 5. 서버의 `chat.gateway.ts`와 `chat-sessions.service.ts`로 이동해 화면 요청이 최종 검증되는 지점을 확인한다.
 6. `20260719084000_one_open_session_per_room` 마이그레이션에서 객실별 열린 상담 중복 방지 조건을 확인한다.
 
