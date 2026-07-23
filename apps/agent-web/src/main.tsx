@@ -64,6 +64,13 @@ import {
   saveLoginPreference,
   type LoginSaveMode,
 } from "./login-preferences";
+import {
+  AGENT_SIDEBAR_MAX_WIDTH,
+  AGENT_SIDEBAR_MIN_WIDTH,
+  clampAgentSidebarWidth,
+  readAgentSidebarWidth,
+  saveAgentSidebarWidth,
+} from "./agent-layout";
 import "./styles.css";
 
 /** 한 로그인 폼에서 서버가 판별한 직원 역할에 따라 관리자 또는 Agent 업무 화면으로 이동합니다. */
@@ -603,12 +610,35 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       : Notification.permission,
   );
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(() =>
+    readAgentSidebarWidth(window.localStorage, window.innerWidth),
+  );
   const knownWaitingIds = useRef<Set<string> | null>(null);
   const activeSessionsRef = useRef<Map<string, SessionView>>(new Map());
   const notificationSocketRef = useRef<Socket | null>(null);
   const soundEnabledRef = useRef(soundEnabled);
   const titleFlasherRef = useRef<TitleFlasher | null>(null);
   const refreshInProgress = useRef(false);
+  const sidebarResizeRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+  const sidebarWidthRef = useRef(sidebarWidth);
+
+  useEffect(() => {
+    sidebarWidthRef.current = sidebarWidth;
+  }, [sidebarWidth]);
+
+  useEffect(() => {
+    // 브라우저 폭이 줄어들면 저장된 큰 사이드바 너비를 즉시 줄여 대화 영역이 화면 밖으로 밀리지 않게 합니다.
+    const fitSidebarToViewport = () =>
+      setSidebarWidth((current) =>
+        clampAgentSidebarWidth(current, window.innerWidth),
+      );
+    window.addEventListener("resize", fitSidebarToViewport);
+    return () => window.removeEventListener("resize", fitSidebarToViewport);
+  }, []);
 
   useEffect(() => {
     const flasher = createTitleFlasher(document, {
@@ -768,6 +798,69 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     setMode("current");
     setSelected(null);
   }
+
+  /** 구분선을 누른 시작 위치와 현재 너비를 기록해 포인터 이동량만큼 목록 폭을 변경합니다. */
+  function startSidebarResize(
+    event: React.PointerEvent<HTMLDivElement>,
+  ): void {
+    if (window.innerWidth <= 900) return;
+    sidebarResizeRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: sidebarWidthRef.current,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    document.body.classList.add("line-sidebar-resizing");
+  }
+
+  /** 드래그 중에는 화면 경계와 대화 영역의 최소 폭을 고려한 값만 반영합니다. */
+  function moveSidebarResize(
+    event: React.PointerEvent<HTMLDivElement>,
+  ): void {
+    const resize = sidebarResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    const next = clampAgentSidebarWidth(
+      resize.startWidth + event.clientX - resize.startX,
+      window.innerWidth,
+    );
+    sidebarWidthRef.current = next;
+    setSidebarWidth(next);
+  }
+
+  /** 드래그 종료값을 저장해 다음 로그인과 새로고침에서도 사용자가 정한 비율을 복원합니다. */
+  function finishSidebarResize(
+    event: React.PointerEvent<HTMLDivElement>,
+  ): void {
+    const resize = sidebarResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) return;
+    sidebarResizeRef.current = null;
+    document.body.classList.remove("line-sidebar-resizing");
+    saveAgentSidebarWidth(window.localStorage, sidebarWidthRef.current);
+  }
+
+  /** 마우스를 사용할 수 없는 경우에도 방향키와 Home/End 키로 동일한 너비 조절이 가능합니다. */
+  function resizeSidebarWithKeyboard(
+    event: React.KeyboardEvent<HTMLDivElement>,
+  ): void {
+    const keyWidth =
+      event.key === "Home"
+        ? AGENT_SIDEBAR_MIN_WIDTH
+        : event.key === "End"
+          ? AGENT_SIDEBAR_MAX_WIDTH
+          : event.key === "ArrowLeft"
+            ? sidebarWidthRef.current - 16
+            : event.key === "ArrowRight"
+              ? sidebarWidthRef.current + 16
+              : null;
+    if (keyWidth === null) return;
+    event.preventDefault();
+    const next = clampAgentSidebarWidth(keyWidth, window.innerWidth);
+    sidebarWidthRef.current = next;
+    setSidebarWidth(next);
+    saveAgentSidebarWidth(window.localStorage, next);
+  }
+
   function logout() { clearStoredAuth("AGENT"); location.href = "/login"; }
   const notificationButtonLabel =
     notificationPermission === "granted"
@@ -777,7 +870,12 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         : t("브라우저 알림 켜기");
 
   return (
-    <div className={`line-agent-workspace ${selected ? "has-selection" : ""}`}>
+    <div
+      className={`line-agent-workspace ${selected ? "has-selection" : ""}`}
+      style={{
+        gridTemplateColumns: `${sidebarWidth}px 8px minmax(0, 1fr)`,
+      }}
+    >
       <aside className="line-agent-list">
         <header className="line-agent-header">
           <div className="agent-brand">REMOTE<span>+</span></div>
@@ -811,6 +909,21 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           ))}
         </div>
       </aside>
+      <div
+        className="line-sidebar-resizer"
+        role="separator"
+        aria-label={t("목록과 대화창 너비 조절")}
+        aria-orientation="vertical"
+        aria-valuemin={AGENT_SIDEBAR_MIN_WIDTH}
+        aria-valuemax={AGENT_SIDEBAR_MAX_WIDTH}
+        aria-valuenow={sidebarWidth}
+        tabIndex={0}
+        onPointerDown={startSidebarResize}
+        onPointerMove={moveSidebarResize}
+        onPointerUp={finishSidebarResize}
+        onPointerCancel={finishSidebarResize}
+        onKeyDown={resizeSidebarWithKeyboard}
+      />
       {selected ? <LineConversationPanel auth={auth} initial={selected} readOnly={mode === "log" || TERMINAL_SESSION_STATUSES.includes(selected.status)} onBack={() => setSelected(null)} onChanged={(updated) => { setSelected(updated); if (TERMINAL_SESSION_STATUSES.includes(updated.status)) setMode("log"); void refresh(); }}/> : <section className="line-conversation-placeholder"><div>R<span>+</span></div><h2>{t(mode === "current" ? "대화를 선택하세요" : "상담 기록을 선택하세요")}</h2><p>{t(mode === "current" ? "왼쪽 목록에서 Guest 문의를 열면 상담이 시작됩니다." : "모든 Agent의 종료 상담을 읽기 전용으로 확인할 수 있습니다.")}</p></section>}
       {notice && <AgentNoticePopup notice={notice} onClose={() => setNotice(null)} onAction={showWaitingList}/>}
       {showPasswordChange && <PasswordChangeModal auth={auth} onClose={() => setShowPasswordChange(false)}/>}
