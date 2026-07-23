@@ -188,7 +188,7 @@ table { width: 100%; border-collapse: collapse; } th, td { padding: 15px 12px; t
 .line-agent-header .agent-brand { margin-right: auto; }.line-agent-header .link-button { padding: 6px; font-size: 10px; white-space: nowrap; }
 .line-agent-account { min-width: 0; max-width: 170px; display: grid; grid-template-columns: 32px minmax(0,1fr); align-items: center; gap: 8px; padding: 5px 9px 5px 6px; border: 1px solid #e3e8ef; border-radius: 999px; background: #f8fafc; }
 .line-agent-account > span { width: 32px; height: 32px; display: grid; place-items: center; color: #fff; background: #316bdb; border-radius: 50%; font-size: 12px; font-weight: 900; }
-.line-agent-account > div { min-width: 0; display: grid; gap: 1px; }.line-agent-account strong,.line-agent-account small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.line-agent-account strong { color: #273247; font-size: 10px; }.line-agent-account small { color: #7b8595; font-size: 8px; font-weight: 700; }
+.line-agent-account > strong { min-width: 0; overflow: hidden; color: #273247; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .line-inbox-tabs { display: grid; grid-template-columns: 1fr 1fr; padding: 0 16px; border-bottom: 1px solid #e9ecef; }
 .line-inbox-tabs button { position: relative; padding: 16px 4px 13px; color: #7d8591; background: transparent; border-radius: 0; box-shadow: none; font-size: 12px; }
 .line-inbox-tabs button:hover { transform: none; box-shadow: none; }.line-inbox-tabs button.active { color: #17202e; }

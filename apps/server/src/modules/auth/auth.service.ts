@@ -25,16 +25,7 @@ export class AuthService {
     const payload: StaffTokenPayload = { sub: agent.id, role: agent.role, kind: "staff", tokenVersion: agent.tokenVersion };
     this.logger.log(JSON.stringify({ event: "login.succeeded", role: agent.role, staffId: agent.id }));
     // 콜센터 PC는 24시간 상시 운영하므로 직원 JWT에는 만료 시각을 넣지 않습니다. 각 요청에서 계정 활성 상태를 다시 확인해 삭제 계정은 즉시 차단합니다.
-    return {
-      accessToken: sign(payload, this.secret()),
-      // 공용 콜센터 PC에서도 프런트가 현재 계정을 명확히 표시할 수 있도록 로그인 ID를 공개 인증 정보에 포함합니다.
-      agent: {
-        id: agent.id,
-        name: agent.name,
-        loginId: agent.loginId,
-        role: agent.role,
-      },
-    };
+    return { accessToken: sign(payload, this.secret()), agent: { id: agent.id, name: agent.name, role: agent.role } };
   }
 
   /**

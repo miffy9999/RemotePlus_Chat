@@ -884,14 +884,11 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           <div className="agent-brand">REMOTE<span>+</span></div>
           <div
             className="line-agent-account"
-            aria-label={`${t("로그인 계정")}: ${auth.agent.name}${auth.agent.loginId ? `, ${auth.agent.loginId}` : ""}`}
-            title={`${auth.agent.name}${auth.agent.loginId ? ` (@${auth.agent.loginId})` : ""}`}
+            aria-label={`${t("로그인 계정")}: ${auth.agent.name}`}
+            title={auth.agent.name}
           >
             <span aria-hidden="true">{auth.agent.name.slice(0, 1).toUpperCase()}</span>
-            <div>
-              <strong>{auth.agent.name}</strong>
-              <small>{auth.agent.loginId ? `@${auth.agent.loginId}` : "AGENT"}</small>
-            </div>
+            <strong>{auth.agent.name}</strong>
           </div>
           <LanguageSwitcher/>
           <button className="link-button" aria-pressed={soundEnabled} onClick={toggleNotificationSound}>{t(soundEnabled ? "알림음 끄기" : "알림음 켜기")}</button>

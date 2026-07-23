@@ -2,8 +2,7 @@ export type StaffRole = "AGENT" | "ADMIN";
 
 export interface AgentAuth {
   accessToken: string;
-  // 순차 배포 중 저장된 구버전 인증에는 loginId가 없을 수 있어 선택값으로 호환하고, 새 로그인부터 항상 서버 값을 사용합니다.
-  agent: { id: string; name: string; loginId?: string; role: StaffRole };
+  agent: { id: string; name: string; role: StaffRole };
 }
 
 const AUTH_KEYS: Record<StaffRole, string> = {
@@ -35,7 +34,6 @@ export function isStoredAuthValid(value: unknown, role: StaffRole, now = Date.no
   const candidate = value as Partial<AgentAuth>;
   if (typeof candidate.accessToken !== "string" || !candidate.agent || candidate.agent.role !== role) return false;
   if (typeof candidate.agent.id !== "string" || typeof candidate.agent.name !== "string") return false;
-  if (candidate.agent.loginId !== undefined && typeof candidate.agent.loginId !== "string") return false;
   const payload = readJwtPayload(candidate.accessToken);
   if (!payload) return false;
   const expiresAt = typeof payload.exp === "number" ? payload.exp * 1000 : null;

@@ -22,7 +22,7 @@ function memoryStorage(): Storage {
 }
 
 describe("직원 로그인 영속 저장", () => {
-  const auth: AgentAuth = { accessToken: token(2_000), agent: { id: "agent-id", name: "Agent", loginId: "agent01", role: "AGENT" } };
+  const auth: AgentAuth = { accessToken: token(2_000), agent: { id: "agent-id", name: "Agent", role: "AGENT" } };
 
   it("유효한 역할과 만료 시각의 인증만 허용한다", () => {
     expect(isStoredAuthValid(auth, "AGENT", 1_000_000)).toBe(true);
@@ -32,18 +32,6 @@ describe("직원 로그인 영속 저장", () => {
 
   it("24시간 콜센터용 만료 없는 직원 JWT를 sessionStorage에서 허용한다", () => {
     expect(isStoredAuthValid({ ...auth, accessToken: tokenWithoutExpiry() }, "AGENT", 9_999_999)).toBe(true);
-  });
-
-  it("순차 배포 전에 저장된 loginId 없는 인증은 유지하되 잘못된 loginId 형식은 거부한다", () => {
-    const legacy = { ...auth, agent: { id: "agent-id", name: "Agent", role: "AGENT" as const } };
-    expect(isStoredAuthValid(legacy, "AGENT", 1_000_000)).toBe(true);
-    expect(
-      isStoredAuthValid(
-        { ...auth, agent: { ...auth.agent, loginId: 123 } },
-        "AGENT",
-        1_000_000,
-      ),
-    ).toBe(false);
   });
 
   it("sessionStorage 저장과 로그아웃 시 역할별 인증 값만 변경한다", () => {

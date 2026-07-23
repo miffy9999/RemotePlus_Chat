@@ -26,10 +26,11 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
     );
   });
 
-  /** 공용 PC에서 다른 직원 계정으로 바뀌어도 표시 이름과 로그인 ID를 헤더에서 즉시 확인해야 합니다. */
+  /** 공용 PC에서 다른 직원 계정으로 바뀌어도 직원 이름을 헤더에서 즉시 확인해야 합니다. */
   it("Agent 헤더에 현재 로그인 계정 칩을 표시한다", () => {
     expect(mainSource).toContain('className="line-agent-account"');
-    expect(mainSource).toContain("auth.agent.loginId");
+    expect(mainSource).toContain("{auth.agent.name}");
+    expect(mainSource).not.toContain("auth.agent.loginId");
     expect(styles).toContain(".line-agent-account {");
   });
 

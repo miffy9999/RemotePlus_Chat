@@ -1,5 +1,27 @@
 # 프로젝트 변경 이력
 
+## 2026-07-23 16:02:15 +09:00
+
+### 수정한 파일
+
+- Agent 계정 표시: `apps/agent-web/src/main.tsx`, `styles.css`, `dashboard-layout.test.ts`
+- 인증 응답·저장 원복: `apps/server/src/modules/auth/auth.service.ts`, `apps/server/tests/auth-service.spec.ts`, `apps/agent-web/src/auth-storage.ts`, `auth-storage.test.ts`
+- 문서: 원본 사양서, `README.md`, `docs/07_UI_Structure.md`, `08_System_Blueprint.md`, `11_User_Manual.md`, `12_Feature_Status.md`
+
+### 수정 내용
+
+- Agent 헤더 계정 칩에서 로그인 ID를 제거하고 현재 직원 이름만 표시하도록 단순화했다.
+- UI에 필요하지 않은 로그인 ID를 인증 응답과 저장 타입에 추가했던 변경도 되돌려 공개 인증 정보 범위를 기존과 동일하게 유지했다.
+
+### 수정 이유
+
+공용 PC에서 필요한 정보는 현재 직원 이름이며 로그인 ID까지 노출할 필요는 없다는 운영 결정을 반영하기 위해서다.
+
+### 확인 방법
+
+- Agent 계정 칩이 직원 이름을 포함하고 로그인 ID 참조가 없는지 회귀 테스트로 확인한다.
+- Agent·서버 테스트, 전체 lint와 빌드를 다시 실행한다.
+
 ## 2026-07-23 15:54:18 +09:00
 
 ### 수정한 파일
