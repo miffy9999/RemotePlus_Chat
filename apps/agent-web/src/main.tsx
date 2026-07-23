@@ -34,6 +34,7 @@ import {
   updateHotelWelcomeMessage,
 } from "./api";
 import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
+import { filterAgentSessions } from "./session-filters";
 import { LanguageProvider, LanguageSwitcher, useI18n } from "./i18n";
 import {
   AUTH_INVALID_EVENT,
@@ -760,12 +761,17 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const currentSessions = useMemo(() => sortSessionsByRecentActivity(sessions.filter((session) => session.status === "WAITING" || (session.status === "ACTIVE" && session.agentId === auth.agent.id))), [sessions, auth.agent.id]);
   const logSessions = useMemo(() => sessions.filter((session) => TERMINAL_SESSION_STATUSES.includes(session.status)), [sessions]);
   const hotels = useMemo(() => [...new Set(sessions.map((session) => session.room.hotel.name))].sort(), [sessions]);
-  const languages = useMemo(() => [...new Set(sessions.map((session) => session.language))].sort(), [sessions]);
-  const visibleSessions = (mode === "current" ? currentSessions : logSessions).filter((session) => {
-    const needle = search.trim().toLocaleLowerCase(locale);
-    const searchable = `${session.room.hotel.name} ${session.room.roomNumber} ${session.lastMessage?.content ?? ""} ${session.agent?.name ?? ""}`.toLocaleLowerCase(locale);
-    return (!needle || searchable.includes(needle)) && (!hotelFilter || session.room.hotel.name === hotelFilter) && (!languageFilter || session.language === languageFilter);
-  });
+  const languages = useMemo(
+    () =>
+      [...new Set(sessions.map((session) => session.language.trim().toLowerCase()))]
+        .filter(Boolean)
+        .sort(),
+    [sessions],
+  );
+  const visibleSessions = filterAgentSessions(
+    mode === "current" ? currentSessions : logSessions,
+    { search, hotel: hotelFilter, language: languageFilter },
+  );
 
   async function choose(session: SessionView) {
     try {
@@ -910,7 +916,7 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         <label className="line-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("대화방, 메시지 검색")}/></label>
         <div className="line-filters">
           <select value={hotelFilter} onChange={(event) => setHotelFilter(event.target.value)} aria-label={t("호텔 필터")}><option value="">{t("전체 호텔")}</option>{hotels.map((hotel) => <option key={hotel}>{hotel}</option>)}</select>
-          <select value={languageFilter} onChange={(event) => setLanguageFilter(event.target.value)} aria-label={t("언어 필터")}><option value="">{t("전체 언어")}</option>{languages.map((language) => <option key={language}>{language.toUpperCase()}</option>)}</select>
+          <select value={languageFilter} onChange={(event) => setLanguageFilter(event.target.value)} aria-label={t("언어 필터")}><option value="">{t("전체 언어")}</option>{languages.map((language) => <option key={language} value={language}>{language.toUpperCase()}</option>)}</select>
           <button onClick={() => void refresh()} aria-label={t("새로고침")}>↻</button>
         </div>
         {error && <div className="error-box line-inbox-error">{error}</div>}
@@ -1805,7 +1811,6 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const [qrRoom, setQrRoom] = useState<RoomView | null>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
   const [selectedLog, setSelectedLog] = useState<SessionView | null>(null);
-  const [welcomeHotelId, setWelcomeHotelId] = useState("");
   const [welcomeLanguage, setWelcomeLanguage] = useState<"ja" | "en">("ja");
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [welcomeError, setWelcomeError] = useState("");
@@ -1844,9 +1849,6 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       setRoomHotelId((current) =>
         h.some((hotel) => hotel.id === current) ? current : (h[0]?.id ?? ""),
       );
-      setWelcomeHotelId((current) =>
-        h.some((hotel) => hotel.id === current) ? current : (h[0]?.id ?? ""),
-      );
       setError("");
     } catch (reason) {
       setError(
@@ -1860,11 +1862,11 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     void refresh();
   }, [filter]);
   useEffect(() => {
-    const hotel = hotels.find((item) => item.id === welcomeHotelId);
+    const hotel = hotels.find((item) => item.id === roomHotelId);
     setWelcomeMessage(hotel ? (welcomeLanguage === "en" ? hotel.welcomeMessageEn : hotel.welcomeMessage) : "");
     setWelcomeError("");
     setWelcomeSaved("");
-  }, [hotels, welcomeHotelId, welcomeLanguage]);
+  }, [hotels, roomHotelId, welcomeLanguage]);
   async function addAgent(e: FormEvent) {
     e.preventDefault();
     try {
@@ -1907,7 +1909,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     setWelcomeError("");
     setWelcomeSaved("");
     try {
-      await updateHotelWelcomeMessage(auth.accessToken, welcomeHotelId, welcomeLanguage, welcomeMessage);
+      await updateHotelWelcomeMessage(auth.accessToken, roomHotelId, welcomeLanguage, welcomeMessage);
       setWelcomeSaved(t("자동 안내문을 저장했습니다. 다음 신규 상담부터 적용됩니다."));
       await refresh();
     } catch (reason) {
@@ -1959,6 +1961,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     clearStoredAuth("ADMIN");
     location.href = "/login";
   }
+  const selectedHotel = hotels.find((hotel) => hotel.id === roomHotelId);
   return (
     <div className="admin-shell">
       <header>
@@ -2246,19 +2249,24 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
               ))}
             </tbody>
           </table>
-        </div>
+      </div>
       <section className="admin-welcome-section">
-        <div className="section-head"><div><span className="section-eyebrow">GUEST MESSAGE</span><h2>{t("호텔별 Guest 자동 안내문")}</h2><p>{t("신규 상담의 첫 시스템 메시지를 호텔·언어별로 설정합니다.")}</p></div></div>
+        <div className="section-head">
+          <div><span className="section-eyebrow">GUEST MESSAGE</span><h2>{t("호텔별 Guest 자동 안내문")}</h2><p>{t("위에서 선택한 호텔의 신규 상담 첫 메시지를 언어별로 설정합니다.")}</p></div>
+          <div className="welcome-selected-hotel" aria-live="polite">
+            <small>{t("현재 선택 호텔")}</small>
+            <strong>{selectedHotel?.name ?? t("선택된 호텔 없음")}</strong>
+          </div>
+        </div>
         {welcomeError && <div className="error-box form-error">{welcomeError}</div>}
         {welcomeSaved && <div className="success-box">{welcomeSaved}</div>}
         <form className="welcome-form" onSubmit={saveWelcomeMessage}>
-          <label>{t("호텔")}<select value={welcomeHotelId} onChange={(event) => setWelcomeHotelId(event.target.value)} disabled={hotels.length === 0}>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select></label>
           <div className="welcome-language-tabs" role="tablist" aria-label={t("안내문 언어")}>
             <button type="button" className={welcomeLanguage === "ja" ? "active" : ""} onClick={() => setWelcomeLanguage("ja")}>日本語</button>
             <button type="button" className={welcomeLanguage === "en" ? "active" : ""} onClick={() => setWelcomeLanguage("en")}>English</button>
           </div>
           <label>{welcomeLanguage === "en" ? "English message" : "日本語メッセージ"}<textarea value={welcomeMessage} onChange={(event) => { setWelcomeMessage(event.target.value); setWelcomeSaved(""); }} maxLength={1000} rows={5}/></label>
-          <div className="welcome-actions"><span>{welcomeMessage.length}/1000</span><button disabled={!welcomeHotelId || !welcomeMessage.trim()}>{t("안내문 저장")}</button></div>
+          <div className="welcome-actions"><span>{welcomeMessage.length}/1000</span><button disabled={!roomHotelId || !welcomeMessage.trim()}>{t("안내문 저장")}</button></div>
         </form>
       </section>
       </section>

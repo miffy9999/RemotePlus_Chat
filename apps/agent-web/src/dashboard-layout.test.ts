@@ -57,4 +57,16 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
     expect(mainSource).toContain('className="admin-welcome-section"');
     expect(mainSource).not.toContain('className="card admin-welcome-card"');
   });
+
+  /** 상단 호텔을 이미 골랐는데 안내문에서 다시 고르게 하는 중복 상태와 입력을 막습니다. */
+  it("룸 추가 호텔 선택을 자동 안내문에도 공통으로 사용한다", () => {
+    expect(mainSource).not.toContain("welcomeHotelId");
+    expect(mainSource).toContain(
+      "hotels.find((item) => item.id === roomHotelId)",
+    );
+    expect(mainSource).toContain(
+      "updateHotelWelcomeMessage(auth.accessToken, roomHotelId",
+    );
+    expect(mainSource).toContain('className="welcome-selected-hotel"');
+  });
 });
