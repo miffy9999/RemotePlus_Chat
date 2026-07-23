@@ -2,9 +2,18 @@
 export function mergeMessage<T extends { id: string; createdAt: string }>(items: T[], incoming: T): T[] {
   return items.some((item) => item.id === incoming.id) ? items : [...items, incoming].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
-/** 서버 만료 시각까지 남은 시간을 MM:SS로 표시하며 지난 시간은 00:00으로 고정합니다. */
+/** 서버 정책상 Agent 상담에 표시할 수 있는 최대 시간은 대화 시작부터 15분입니다. */
+export const AGENT_SESSION_DURATION_SECONDS = 15 * 60;
+
+/**
+ * 서버 만료 시각까지 남은 시간을 MM:SS로 표시합니다.
+ * PC 시계가 서버보다 느려 절대 시각 차이가 17분처럼 계산돼도 운영 정책 상한인 15분을 넘겨 노출하지 않습니다.
+ */
 export function remainingTime(expiresAt: string, now: number): string {
-  const seconds = Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now) / 1000));
+  const seconds = Math.min(
+    AGENT_SESSION_DURATION_SECONDS,
+    Math.max(0, Math.ceil((new Date(expiresAt).getTime() - now) / 1000)),
+  );
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 

@@ -54,4 +54,14 @@ describe("공동 상담 로그 필터", () => {
     );
     expect(mainSource).toContain("종료된 상담 기록입니다");
   });
+
+  /** 상담 종료는 현재 대화를 읽기 전용으로 바꿀 뿐 사용자가 선택하지 않은 Log 탭으로 이동시키지 않습니다. */
+  it("상담 상태 변경 뒤 현재 탭과 본문을 유지한다", () => {
+    const handler = mainSource.match(
+      /function updateSelectedConversation[\s\S]*?\n  }/,
+    )?.[0];
+    expect(handler).toContain("setSelected(updated)");
+    expect(handler).not.toContain('setMode("log")');
+    expect(mainSource).toContain("onChanged={updateSelectedConversation}");
+  });
 });

@@ -48,4 +48,13 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
       ".admin-dashboard.menu-collapsed { grid-template-columns: 76px minmax(0,1fr); }",
     );
   });
+
+  /** 호텔·룸과 자동 안내문이 별도 카드로 다시 분리돼 긴 화면처럼 보이지 않게 합니다. */
+  it("호텔 자원과 자동 안내문을 하나의 관리 카드에 배치한다", () => {
+    expect(mainSource).toContain(
+      'className="card admin-property-card admin-hotel-card"',
+    );
+    expect(mainSource).toContain('className="admin-welcome-section"');
+    expect(mainSource).not.toContain('className="card admin-welcome-card"');
+  });
 });

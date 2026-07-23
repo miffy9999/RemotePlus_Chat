@@ -865,6 +865,11 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   }
 
   function logout() { clearStoredAuth("AGENT"); location.href = "/login"; }
+  /** 종료·만료 상태를 현재 본문에 반영하되 상담원이 직접 Log를 누르기 전에는 탭을 바꾸지 않습니다. */
+  function updateSelectedConversation(updated: SessionView): void {
+    setSelected(updated);
+    void refresh();
+  }
   const notificationButtonLabel =
     notificationPermission === "granted"
       ? t("브라우저 알림 켜짐")
@@ -935,7 +940,7 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         onPointerCancel={finishSidebarResize}
         onKeyDown={resizeSidebarWithKeyboard}
       />
-      {selected ? <LineConversationPanel auth={auth} initial={selected} readOnly={mode === "log" || TERMINAL_SESSION_STATUSES.includes(selected.status)} onBack={() => setSelected(null)} onChanged={(updated) => { setSelected(updated); if (TERMINAL_SESSION_STATUSES.includes(updated.status)) setMode("log"); void refresh(); }}/> : <section className="line-conversation-placeholder"><div>R<span>+</span></div><h2>{t(mode === "current" ? "대화를 선택하세요" : "상담 기록을 선택하세요")}</h2><p>{t(mode === "current" ? "왼쪽 목록에서 Guest 문의를 열면 상담이 시작됩니다." : "모든 Agent의 종료 상담을 읽기 전용으로 확인할 수 있습니다.")}</p></section>}
+      {selected ? <LineConversationPanel auth={auth} initial={selected} readOnly={mode === "log" || TERMINAL_SESSION_STATUSES.includes(selected.status)} onBack={() => setSelected(null)} onChanged={updateSelectedConversation}/> : <section className="line-conversation-placeholder"><div>R<span>+</span></div><h2>{t(mode === "current" ? "대화를 선택하세요" : "상담 기록을 선택하세요")}</h2><p>{t(mode === "current" ? "왼쪽 목록에서 Guest 문의를 열면 상담이 시작됩니다." : "모든 Agent의 종료 상담을 읽기 전용으로 확인할 수 있습니다.")}</p></section>}
       {notice && <AgentNoticePopup notice={notice} onClose={() => setNotice(null)} onAction={showWaitingList}/>}
       {showPasswordChange && <PasswordChangeModal auth={auth} onClose={() => setShowPasswordChange(false)}/>}
     </div>
@@ -2107,7 +2112,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       )}
       {activeAdminSection === "hotels" && (
       <>
-      <section className="card admin-property-card">
+      <section className="card admin-property-card admin-hotel-card">
         <div className="admin-panel-title">
           <div><span className="section-eyebrow">PROPERTY</span><h2>{t("호텔·룸 관리")}</h2><p>{t("호텔과 객실, 고객 접속 QR을 한곳에서 관리합니다.")}</p></div>
           <strong>{rooms.length}</strong>
@@ -2242,8 +2247,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
             </tbody>
           </table>
         </div>
-      </section>
-      <section className="card admin-welcome-card">
+      <section className="admin-welcome-section">
         <div className="section-head"><div><span className="section-eyebrow">GUEST MESSAGE</span><h2>{t("호텔별 Guest 자동 안내문")}</h2><p>{t("신규 상담의 첫 시스템 메시지를 호텔·언어별로 설정합니다.")}</p></div></div>
         {welcomeError && <div className="error-box form-error">{welcomeError}</div>}
         {welcomeSaved && <div className="success-box">{welcomeSaved}</div>}
@@ -2256,6 +2260,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           <label>{welcomeLanguage === "en" ? "English message" : "日本語メッセージ"}<textarea value={welcomeMessage} onChange={(event) => { setWelcomeMessage(event.target.value); setWelcomeSaved(""); }} maxLength={1000} rows={5}/></label>
           <div className="welcome-actions"><span>{welcomeMessage.length}/1000</span><button disabled={!welcomeHotelId || !welcomeMessage.trim()}>{t("안내문 저장")}</button></div>
         </form>
+      </section>
       </section>
       </>
       )}
