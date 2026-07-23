@@ -13,7 +13,7 @@
 
 호텔 객실에 인쇄하여 비치한 고정 QR 코드 또는 전용 링크를 통해 투숙객이 별도의 앱 설치나 회원가입 없이 콜센터 직원과 실시간으로 채팅할 수 있도록 한다. QR 코드는 객실 생성 때 한 번 발급된 고객 전용 URL을 그대로 담으며 별도의 유효기간이나 정기 갱신을 두지 않는다.
 
-채팅 세션은 객실을 기준으로 생성하며, 한 번의 상담은 최대 15분 동안만 사용할 수 있다. 상담원이 종료하거나 제한 시간이 지나면 해당 세션에서는 더 이상 메시지를 보낼 수 없어야 한다.
+채팅 세션은 객실을 기준으로 생성한다. Guest는 Agent 배정 전 `WAITING`에서도 메시지를 보내 DB에 저장할 수 있으며 대기 시간만으로 만료되지 않는다. 15분 제한은 Agent가 대화를 처음 연 시점부터 계산하고, 상담원이 종료하거나 제한 시간이 지나면 더 이상 메시지를 보낼 수 없어야 한다.
 
 ### MVP 목표
 
@@ -71,14 +71,13 @@ flowchart LR
   - 연결 끊김
   - 재연결 중
 - 상담 시작 시각 표시
-- Agent 수락 전에는 대기 안내, 수락 뒤에는 15분 남은 상담 시간 표시
-- 고객의 명시적 상담 종료와 확인 창
+- 남은 상담 시간 표시
 - 상담 종료 안내 표시
 - 종료·만료·인증 거부 시 기기 복구 정보 자동 삭제
 
 #### 사용 제한
 
-- Agent 수락 시점부터 15분 경과 후 메시지 전송 차단
+- 15분 경과 후 메시지 전송 차단
 - 종료된 세션 재사용 차단
 - 동일 객실의 과도한 세션 생성 차단
 - 비정상적인 반복 메시지 차단
@@ -126,7 +125,7 @@ flowchart LR
 
 - 새로운 상담 요청 표시
 - 새로운 메시지 표시
-- Edge를 포함한 Chromium 브라우저의 서비스 워커 기반 브라우저 알림
+- 브라우저 알림
 - 알림음 켜기·끄기(기본 꺼짐)
 - 화면 팝업
 - 미응답 상담 강조 표시
@@ -190,9 +189,9 @@ flowchart LR
 
 - 새 상담 세션 생성
 - 세션 상태 관리
-- Agent 수락 시 상담 시작 및 `수락 시각 + 15분` 만료 시각 기록
-- 수락 뒤 15분 경과 시 자동 종료
-- 상담원 또는 고객의 명시적 수동 종료
+- 상담 시작 및 만료 시각 기록
+- 15분 경과 시 자동 종료
+- 상담원의 수동 종료
 - 종료·만료 등 쓰기가 끝난 상담은 `closedAt` 기준 30일 뒤 메시지와 함께 자동 삭제
 - 연결 종료 시 상태 처리
 - 중복 세션 생성 제한
@@ -279,7 +278,7 @@ flowchart LR
 초기 화면은 공통 직원 로그인으로 시작하고 인증된 역할에 따라 관리자 페이지 또는 Agent 페이지로 자동 분기한다. 관리자 페이지는 다음 최소 관리 기능을 포함한다.
 
 - 관리자 인증 및 Agent 페이지와의 권한 분리
-- 새 DB의 무료 테스트 계정은 관리자 `admin / admin`, Agent `agent01 / agent01`로 만들고 비밀번호 길이·문자 조합은 제한하지 않되 DB에는 bcrypt 해시로만 저장한다. 시드는 환경변수와 실행 횟수에 관계없이 이미 존재하는 직원 계정의 비밀번호·토큰 버전을 절대 갱신하지 않으며, 사용자가 변경한 비밀번호가 배포·재시작·콜드 스타트 뒤에도 유지되어야 한다.
+- 현재 무료 테스트 배포의 고정 계정은 관리자 `admin / admin`, Agent `agent01 / agent01`을 사용하고 비밀번호 길이·문자 조합은 제한하지 않되 DB에는 bcrypt 해시로만 저장
 - Agent 추가 및 기본 계정 목록 조회
 - Agent 삭제(기존 상담 기록의 담당자 관계는 제거하되 상담 기록은 보존)
 - 호텔 추가 및 호텔별 룸 추가
@@ -364,9 +363,9 @@ flowchart LR
 ## 7. 상담 상태 설계
 
 ```text
-WAITING     상담원이 입장하기 전(상담 제한 시간 미시작)
+WAITING     상담원이 입장하기 전
 ACTIVE      상담 진행 중
-CLOSED      상담원 또는 고객이 정상 종료
+CLOSED      상담원이 정상 종료
 EXPIRED     제한 시간이 지나 자동 종료
 CANCELLED   상담 시작 전 취소
 BLOCKED     관리 정책에 의해 차단
@@ -377,10 +376,8 @@ BLOCKED     관리 정책에 의해 차단
 ```mermaid
 stateDiagram-v2
     [*] --> WAITING
-    WAITING --> ACTIVE: 상담원 수락
-    WAITING --> CLOSED: 고객 종료
+    WAITING --> ACTIVE: Agent가 대화 열기
     ACTIVE --> CLOSED: 상담원 종료
-    ACTIVE --> CLOSED: 고객 종료
     ACTIVE --> EXPIRED: 15분 경과
     CLOSED --> [*]
     EXPIRED --> [*]
@@ -514,6 +511,8 @@ erDiagram
     HOTEL {
         uuid id PK
         string name
+        text welcomeMessage
+        text welcomeMessageEn
         string status
         datetime createdAt
     }
@@ -530,6 +529,7 @@ erDiagram
         uuid id PK
         uuid roomId FK
         string keyHash
+        string encryptedKey
         string status
         datetime expiresAt
         datetime createdAt
@@ -540,6 +540,7 @@ erDiagram
         string name
         string loginId
         string passwordHash
+        int tokenVersion
         string role
         string status
         datetime createdAt
@@ -551,10 +552,12 @@ erDiagram
         uuid agentId FK
         string status
         string language
+        string guestTokenHash
         datetime startedAt
-        datetime expiresAt
+        datetime expiresAt "nullable: WAITING은 null"
         datetime closedAt
         string closeReason
+        datetime lastActivityAt
         datetime createdAt
     }
 
@@ -612,27 +615,16 @@ POST /api/auth/login
 
 서버는 로그인 ID로 계정을 한 번 조회하고 비밀번호와 활성 상태를 확인한 뒤 응답의 `agent.role`에 `ADMIN` 또는 `AGENT`를 포함한다. 화면은 이 역할을 신뢰하되 각 관리·상담 API에서도 역할 권한을 다시 검사한다.
 
-공통 로그인 화면은 선택형 `아이디 저장`과 `로그인 정보 저장` 버튼을 제공한다. 전자는 로그인 ID만 로컬 환경설정에 저장하고, 후자는 비밀번호를 앱 저장소에 기록하지 않은 채 브라우저의 표준 비밀번호 관리자에 저장을 요청한다. 실제 직원 JWT는 기존과 같이 탭 단위 `sessionStorage`에만 둔다.
-
-무료 Render 로그인 화면은 마운트 시 헬스 체크를 한 번 보내 실제 사용자가 입력하는 동안 휴면 API의 시작을 앞당긴다. 로그인 요청이 4초를 넘으면 서버를 깨우는 중이라는 안내를 표시하되, 주기적 외부 핑이나 백그라운드 keep-alive는 사용하지 않는다.
-
-직원 비밀번호 변경 모달의 현재·새·확인 비밀번호 입력칸은 각각 독립적인 눈 아이콘 버튼을 제공해 입력값 표시와 숨김을 전환하며, 버튼은 키보드와 스크린 리더에서도 용도를 확인할 수 있어야 한다.
-
 ### 상담 목록 조회
 
 ```http
-GET /api/agent/chat-sessions?scope=OPEN
-GET /api/agent/chat-sessions?scope=COMPLETED
+GET /api/agent/chat-sessions
 ```
 
-대기·진행 상담은 5초 폴링용 `OPEN`, 종료·만료·취소·차단 상담은 공동 로그용 `COMPLETED` 범위로 분리한다. 완료 로그는 최초 진입·상태 변경·60초 주기에만 갱신해 무료 DB와 네트워크에 5초마다 전체 30일 기록을 다시 싣지 않는다. 공개 상담 응답과 WebSocket 상태 이벤트는 투숙객 토큰 해시, 직원 비밀번호 해시와 토큰 버전을 포함하지 않으며 담당 직원 정보도 `id`, `name`만 반환한다.
-
-직원 목록 폴링의 요청 제한 키는 IP만 사용하지 않고 `IP + Bearer 토큰 지문`을 사용한다. 같은 콜센터 NAT에서 여러 직원·브라우저가 5초 폴링해도 서로의 정상 요청 한도를 소진하지 않되, 원본 JWT는 제한기 메모리에 저장하지 않는다.
-
-### 상담원 수락
+### Agent 대화 열기
 
 ```http
-POST /api/agent/chat-sessions/{sessionId}/accept
+POST /api/agent/chat-sessions/{sessionId}/open
 ```
 
 ### WebSocket 이벤트
@@ -643,6 +635,7 @@ chat:message
 chat:message-accepted
 chat:session-updated
 chat:session-closed
+chat:inbox-updated
 chat:error
 ```
 
@@ -748,9 +741,9 @@ flowchart TD
 5. 양쪽에서 실시간 텍스트 메시지를 주고받을 수 있다.
 6. 새로고침하거나 잠시 연결이 끊겨도 진행 중인 상담으로 재접속할 수 있다.
 7. 세션별 메시지가 서로 섞이지 않는다.
-8. Agent 수락 시점부터 15분이 지나면 서버가 세션을 자동 종료한다.
+8. 15분이 지나면 서버가 세션을 자동 종료한다.
 9. 종료된 세션에서는 추가 메시지를 보낼 수 없다.
-10. 콜센터 직원과 투숙객이 확인 절차를 거쳐 상담을 직접 종료할 수 있고 양쪽 화면에 즉시 반영된다.
+10. 콜센터 직원이 상담을 직접 종료할 수 있다.
 11. 인증되지 않은 사용자는 콜센터 화면에 접근할 수 없다.
 12. 과도한 메시지 요청을 서버가 제한한다.
 13. 서버 오류가 다른 상담 세션에 영향을 주지 않는다.

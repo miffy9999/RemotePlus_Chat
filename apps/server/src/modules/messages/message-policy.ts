@@ -16,9 +16,12 @@ export function validateMessageInput(input: { sessionId?: unknown; clientMessage
   return { sessionId: input.sessionId, clientMessageId: input.clientMessageId, content };
 }
 
-/** ACTIVE 상태가 아니거나 서버 시각상 만료된 상담에는 메시지를 저장하지 않습니다. */
-export function assertSessionWritable(status: string, expiresAt: Date | null, now: Date = new Date()): void {
-  if (status !== "ACTIVE") throw new ConflictException("진행 중인 상담에서만 메시지를 보낼 수 있습니다.");
-  if (!expiresAt) throw new ConflictException("상담 제한 시간이 설정되지 않았습니다.");
-  if (expiresAt.getTime() <= now.getTime()) throw new ConflictException("상담 제한 시간이 만료되었습니다.");
+/**
+ * Guest는 WAITING에서도 문의를 미리 저장할 수 있지만 Agent는 담당 배정된 ACTIVE에서만 답변합니다.
+ * ACTIVE에는 Agent가 대화를 연 시점에 계산한 만료시각이 반드시 있어야 합니다.
+ */
+export function assertSessionWritable(status: string, expiresAt: Date | null, senderKind: "guest" | "staff", now: Date = new Date()): void {
+  if (senderKind === "guest" && status === "WAITING") return;
+  if (status !== "ACTIVE") throw new ConflictException("진행 가능한 상담에서만 메시지를 보낼 수 있습니다.");
+  if (!expiresAt || expiresAt.getTime() <= now.getTime()) throw new ConflictException("상담 제한 시간이 만료되었습니다.");
 }

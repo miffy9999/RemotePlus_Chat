@@ -23,9 +23,12 @@
 - 룸 접근 키와 투숙객 상담 토큰은 SHA-256 해시만 저장한다.
 - API 응답에는 `passwordHash`, `keyHash`, `guestTokenHash`를 포함하지 않는다.
 
-## Phase 1 시간 규칙
+## 상담 시간 및 호텔 자동 안내문 규칙
 
-상담 생성 시 `expiresAt`은 `null`로 두어 대기 시간을 제한 시간에 포함하지 않는다. Agent 수락 시 동일 갱신에서 `startedAt`과 `expiresAt = startedAt + 15분`을 기록한다. 기존 WAITING 데이터는 배포 마이그레이션에서 `expiresAt = null`로 보정하고, 기존 ACTIVE 데이터는 `startedAt + 15분`으로 보정한다.
+- 상담 생성 시 `WAITING`, `startedAt=null`, `expiresAt=null`로 저장하며 대기 시간으로 만료하지 않는다.
+- Agent가 처음 대화를 열 때 `ACTIVE`, `startedAt=현재`, `expiresAt=현재+15분`을 원자적으로 기록한다.
+- `Hotel.welcomeMessage`는 일본어와 현재 MVP 기본 대체 원문, `welcomeMessageEn`은 영어 Guest용 첫 안내문이다.
+- 상담 생성 트랜잭션에서 선택 언어에 맞는 안내문을 첫 `SYSTEM` 메시지로 복사해 과거 안내 기록을 보존한다.
 
 ## 상담 기록 보존 규칙
 

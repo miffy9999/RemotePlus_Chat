@@ -46,9 +46,12 @@ describe("공동 상담 로그 필터", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  /** Agent 공동 로그는 활성 채팅 컴포넌트를 열지 않고 관리자와 같은 읽기 전용 모달을 사용합니다. */
-  it("Agent 로그 상세를 읽기 전용 모달로 연다", () => {
-    expect(mainSource).toContain("<ConversationLogBlock sessions={conversationLogs} onOpen={setSelectedLog} />");
-    expect(mainSource).not.toContain("<ConversationLogBlock sessions={sessions} onOpen={open} />");
+  /** LINE형 Agent Log는 현재 상담 목록과 분리되고 선택한 완료 상담을 읽기 전용 본문으로 엽니다. */
+  it("Agent Log 상세를 읽기 전용 LINE 본문으로 연다", () => {
+    expect(mainSource).toContain('setMode("log")');
+    expect(mainSource).toContain(
+      'readOnly={mode === "log" || TERMINAL_SESSION_STATUSES.includes(selected.status)}',
+    );
+    expect(mainSource).toContain("종료된 상담 기록입니다");
   });
 });

@@ -41,11 +41,13 @@ enum MessageType {
 }
 
 model Hotel {
-  id        String       @id @default(uuid()) @db.Uuid
-  name      String
-  status    RecordStatus @default(ACTIVE)
-  createdAt DateTime     @default(now())
-  rooms     Room[]
+  id               String       @id @default(uuid()) @db.Uuid
+  name             String
+  welcomeMessage   String       @default("こんにちは。ホテルのカスタマーサポートです。ご用件をメッセージでお送りください。")
+  welcomeMessageEn String       @default("Hello. This is the hotel customer support team. Please send us your request.")
+  status           RecordStatus @default(ACTIVE)
+  createdAt        DateTime     @default(now())
+  rooms            Room[]
 }
 
 model Room {
@@ -93,7 +95,6 @@ model ChatSession {
   language    String            @default("ko")
   guestTokenHash String         @unique
   startedAt   DateTime?
-  // 대기 시간은 상담 제한 시간에 포함하지 않으므로 Agent 수락 전에는 만료 시각이 없습니다.
   expiresAt   DateTime?
   closedAt    DateTime?
   closeReason String?

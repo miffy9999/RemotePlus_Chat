@@ -1,10 +1,11 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { hash } from "bcrypt";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import { CreateAgentDto } from "./dto/create-agent.dto";
 import { CreateHotelDto } from "./dto/create-hotel.dto";
 import { CreateRoomDto } from "./dto/create-room.dto";
+import { UpdateHotelWelcomeMessageDto } from "./dto/update-hotel-welcome-message.dto";
 import { createOpaqueToken, sha256 } from "../../common/security/hash";
 import { decryptSecretOrNull, encryptSecret } from "../../common/security/encryption";
 
@@ -38,6 +39,21 @@ export class AdminService {
     const name = dto.name.trim();
     if (await this.prisma.hotel.findFirst({ where: { name: { equals: name, mode: "insensitive" } } })) throw new ConflictException("같은 이름의 호텔이 이미 있습니다.");
     return this.prisma.hotel.create({ data: { name } });
+  }
+
+  /**
+   * Guest 상담 생성 시 DB에 복사해 둘 호텔별 첫 안내문을 수정합니다.
+   * 과거 SYSTEM 메시지는 당시 안내의 감사 기록이므로 변경하지 않고 신규 상담부터 적용합니다.
+   */
+  async updateHotelWelcomeMessage(id: string, dto: UpdateHotelWelcomeMessageDto) {
+    const welcomeMessage = dto.welcomeMessage.trim();
+    if (!welcomeMessage) throw new BadRequestException("자동 안내문은 공백만 입력할 수 없습니다.");
+    if (!(await this.prisma.hotel.findUnique({ where: { id }, select: { id: true } }))) {
+      throw new NotFoundException("안내문을 수정할 호텔을 찾을 수 없습니다.");
+    }
+    // 요청 언어를 Prisma 필드명으로 직접 사용하지 않고 분기해 임의 필드 갱신을 막습니다.
+    const data = dto.language === "en" ? { welcomeMessageEn: welcomeMessage } : { welcomeMessage };
+    return this.prisma.hotel.update({ where: { id }, data });
   }
 
   /** 호텔 삭제는 DB 연쇄 삭제 규칙으로 하위 룸·접근키·상담·메시지를 한 작업에서 함께 제거합니다. */

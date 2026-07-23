@@ -30,10 +30,10 @@ export function readStoredGuestAccess(accessKey: string, storage: Storage = loca
   try {
     const parsed: unknown = JSON.parse(raw);
     if (isStoredGuestAccess(parsed)) {
+      const expiresAt = parsed.session.expiresAt ? new Date(parsed.session.expiresAt).getTime() : null;
       const terminal = parsed.session.status === "CLOSED" || parsed.session.status === "EXPIRED";
-      const waiting = parsed.session.status === "WAITING" && parsed.session.expiresAt === null;
-      const expiresAt = parsed.session.expiresAt ? new Date(parsed.session.expiresAt).getTime() : Number.NaN;
-      if (!terminal && (waiting || (Number.isFinite(expiresAt) && expiresAt > nowMs))) return parsed;
+      // WAITING은 Agent가 열기 전 만료시각이 없으므로 저장 시간을 이유로 복구 정보를 삭제하지 않습니다.
+      if (!terminal && (expiresAt === null || (Number.isFinite(expiresAt) && expiresAt > nowMs))) return parsed;
     }
   } catch { /* 아래 공통 정리에서 손상된 JSON을 제거합니다. */ }
   storage.removeItem(key);

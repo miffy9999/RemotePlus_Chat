@@ -1,15 +1,15 @@
 import { ConflictException, ForbiddenException } from "@nestjs/common";
-import { assertCanAccept, assertCanClose, canStaffReadSession, isSessionExpired } from "../src/modules/chat-sessions/session-policy";
+import { assertCanClose, assertCanOpen, canStaffReadSession, isSessionExpired } from "../src/modules/chat-sessions/session-policy";
 
 describe("상담 상태 전환 정책", () => {
   /** WAITING이며 담당자가 없는 상담만 수락할 수 있어야 합니다. */
   it("대기 상담 수락을 허용한다", () => {
-    expect(() => assertCanAccept("WAITING", null)).not.toThrow();
+    expect(() => assertCanOpen("WAITING", null, "agent-id")).not.toThrow();
   });
 
   /** 이미 진행 중인 상담의 이중 수락은 메시지 혼선을 만들기 때문에 거절합니다. */
   it("이미 수락된 상담을 거절한다", () => {
-    expect(() => assertCanAccept("ACTIVE", "agent-id")).toThrow(ConflictException);
+    expect(() => assertCanOpen("ACTIVE", "agent-id", "other-agent")).toThrow(ConflictException);
   });
 
   /** 담당자가 아닌 Agent가 다른 상담을 종료할 수 없어야 합니다. */
@@ -41,8 +41,8 @@ describe("상담 상태 전환 정책", () => {
     expect(isSessionExpired(new Date(now.getTime() + 1), now)).toBe(false);
   });
 
-  /** Agent 수락 전 WAITING 상담의 null 만료 시각은 15분 제한 대상으로 취급하지 않습니다. */
-  it("수락 전 상담은 만료되지 않는다", () => {
-    expect(isSessionExpired(null, new Date("2026-07-23T00:00:00.000Z"))).toBe(false);
+  /** WAITING에는 만료시각이 없으므로 대기 시간만으로 자동 종료하지 않아야 합니다. */
+  it("만료시각이 없는 대기 상담을 만료로 보지 않는다", () => {
+    expect(isSessionExpired(null)).toBe(false);
   });
 });

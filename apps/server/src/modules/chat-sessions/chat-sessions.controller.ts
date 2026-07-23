@@ -37,7 +37,10 @@ export class ChatSessionsController {
 
   /** 해당 상담의 투숙객 토큰으로 고객이 직접 상담을 종료합니다. */
   @Post(":sessionId/guest-close")
-  closeByGuest(@Param("sessionId", new ParseUUIDPipe()) id: string, @Headers("x-guest-token") guestToken?: string) {
+  closeByGuest(
+    @Param("sessionId", new ParseUUIDPipe()) id: string,
+    @Headers("x-guest-token") guestToken?: string,
+  ) {
     return this.sessions.closeByGuest(id, guestToken);
   }
 }
@@ -50,13 +53,19 @@ export class AgentChatSessionsController {
   /** 대기·진행·종료 상태를 선택적으로 필터링해 조회합니다. */
   @Get()
   async list(@Req() request: Request, @Query() query: ListSessionsDto) {
-    await requireStaff(request, this.auth, ["AGENT", "ADMIN"]);
-    return this.sessions.list(query.status, query.scope);
+    const staff = await requireStaff(request, this.auth, ["AGENT", "ADMIN"]);
+    return this.sessions.list(query.status, staff, query.scope);
   }
 
   /** WAITING 상담을 현재 Agent에게 원자적으로 배정하고 ACTIVE로 전환합니다. */
   @Post(":sessionId/accept")
   async accept(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request) {
     return this.sessions.accept(id, await requireStaff(request, this.auth, ["AGENT"]));
+  }
+
+  /** LINE형 목록에서 항목을 여는 동작과 API 의미를 맞춘 새 경로이며 기존 accept 경로도 호환 유지합니다. */
+  @Post(":sessionId/open")
+  async open(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request) {
+    return this.sessions.open(id, await requireStaff(request, this.auth, ["AGENT"]));
   }
 }

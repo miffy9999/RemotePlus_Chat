@@ -16,14 +16,19 @@ describe("메시지 서버 검증 정책", () => {
   /** ACTIVE 상태이며 아직 만료되지 않은 상담만 쓰기를 허용합니다. */
   it("진행 중인 상담의 쓰기를 허용한다", () => {
     const now = new Date("2026-07-19T08:00:00.000Z");
-    expect(() => assertSessionWritable("ACTIVE", new Date(now.getTime() + 1000), now)).not.toThrow();
+    expect(() => assertSessionWritable("ACTIVE", new Date(now.getTime() + 1000), "staff", now)).not.toThrow();
+  });
+
+  /** Guest 문의는 Agent가 열기 전 WAITING에서도 DB에 먼저 저장할 수 있어야 합니다. */
+  it("대기 중 Guest 선문의를 허용한다", () => {
+    expect(() => assertSessionWritable("WAITING", null, "guest")).not.toThrow();
+    expect(() => assertSessionWritable("WAITING", null, "staff")).toThrow(ConflictException);
   });
 
   /** 종료 상태나 만료 시각 이후 메시지는 클라이언트 UI와 무관하게 서버에서 차단합니다. */
   it("종료되거나 만료된 상담의 쓰기를 거절한다", () => {
     const now = new Date("2026-07-19T08:00:00.000Z");
-    expect(() => assertSessionWritable("CLOSED", new Date(now.getTime() + 1000), now)).toThrow(ConflictException);
-    expect(() => assertSessionWritable("ACTIVE", now, now)).toThrow(ConflictException);
-    expect(() => assertSessionWritable("ACTIVE", null, now)).toThrow(ConflictException);
+    expect(() => assertSessionWritable("CLOSED", new Date(now.getTime() + 1000), "guest", now)).toThrow(ConflictException);
+    expect(() => assertSessionWritable("ACTIVE", now, "guest", now)).toThrow(ConflictException);
   });
 });

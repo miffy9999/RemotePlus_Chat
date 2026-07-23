@@ -1,8 +1,8 @@
 import React, { FormEvent, useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { io, type Socket } from "socket.io-client";
-import { closeGuestSession, createSession, getMessages, getSession, GuestApiError, SOCKET_URL, type GuestMessage, type GuestSession, type StoredGuestAccess, verifyAccess } from "./api";
-import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
+import { createSession, getMessages, getSession, GuestApiError, SOCKET_URL, type GuestMessage, type GuestSession, type StoredGuestAccess, verifyAccess } from "./api";
+import { mergeMessage, scrollChatToLatest } from "./chat-utils";
 import { LanguageProvider, normalizeGuestUiLanguage, useI18n } from "./i18n";
 import { clearStoredGuestAccess, readStoredGuestAccess, saveStoredGuestAccess } from "./guest-access-storage";
 import "./styles.css";
@@ -15,7 +15,6 @@ function GuestApp(): React.JSX.Element {
   const accessKey = new URLSearchParams(location.search).get("accessKey") ?? "";
   const [screen, setScreen] = useState<ScreenState>("loading"); const [error, setError] = useState(""); const [access, setAccess] = useState<StoredGuestAccess | null>(null); const [messages, setMessages] = useState<GuestMessage[]>([]); const [input, setInput] = useState(""); const [connection, setConnection] = useState("연결 중"); const [now, setNow] = useState(Date.now()); const socketRef = useRef<Socket | null>(null);
   const [language, setLanguage] = useState<string>(uiLanguage); const [agreed, setAgreed] = useState(false); const [starting, setStarting] = useState(false);
-  const [showCloseConfirm, setShowCloseConfirm] = useState(false); const [closing, setClosing] = useState(false);
   const roomSuffix = { ja: "号室", en: "", ko: "호", zh: "号房" }[uiLanguage];
   const preparationStarted = useRef(false);
   const messagesRef = useRef<HTMLElement | null>(null);
@@ -31,7 +30,8 @@ function GuestApp(): React.JSX.Element {
         if (stored) {
           try {
             const session = await getSession(stored.session.id, stored.guestToken);
-            const restorable = session.status === "WAITING" || (session.status === "ACTIVE" && !!session.expiresAt && new Date(session.expiresAt).getTime() > Date.now());
+            const restorable = session.status === "WAITING"
+              || (session.status === "ACTIVE" && session.expiresAt !== null && new Date(session.expiresAt).getTime() > Date.now());
             if (restorable) { setUiLanguage(normalizeGuestUiLanguage(session.language)); setAccess({ ...stored, session }); setScreen("ready"); return; }
             // 서버가 종료·만료 상태를 반환하면 오래된 기기 토큰을 제거하고 새 상담 동의 화면으로 이동합니다.
             clearStoredGuestAccess(accessKey); setScreen("consent"); return;
@@ -64,7 +64,9 @@ function GuestApp(): React.JSX.Element {
   useEffect(() => {
     if (!access) return;
     const terminal = access.session.status === "CLOSED" || access.session.status === "EXPIRED";
-    const expiredByClock = access.session.status === "ACTIVE" && !!access.session.expiresAt && new Date(access.session.expiresAt).getTime() <= now;
+    const expiredByClock = access.session.status === "ACTIVE"
+      && access.session.expiresAt !== null
+      && new Date(access.session.expiresAt).getTime() <= now;
     if (!terminal && !expiredByClock) return;
     // 서버 이벤트가 늦더라도 브라우저 만료 시각에 복구 토큰을 제거해 다음 QR 진입이 오래된 상담에 묶이지 않게 합니다.
     clearStoredGuestAccess(accessKey);
@@ -80,16 +82,14 @@ function GuestApp(): React.JSX.Element {
   }, [messages.length, access?.session.status]);
   /** 동의 버튼을 누른 시점에만 접근 키를 검증하고 새 상담을 생성합니다. */
   async function startConsultation(): Promise<void> { if (!agreed || starting) return; setStarting(true); setError(""); try { const verified = await verifyAccess(accessKey); const created = await createSession(verified.accessToken, language); saveStoredGuestAccess(accessKey, created); setAccess(created); setScreen("ready"); } catch (reason) { setError(reason instanceof Error ? reason.message : "상담을 시작하지 못했습니다."); setScreen("error"); } finally { setStarting(false); } }
-  async function send(event: FormEvent): Promise<void> { event.preventDefault(); const content = input.trim(); if (!content || !access || access.session.status !== "ACTIVE" || !socketRef.current) return; setInput(""); const result = await socketRef.current.emitWithAck("chat:message", { sessionId: access.session.id, clientMessageId: crypto.randomUUID(), content }); if (!result?.ok) setError(result?.error?.message ?? "메시지 전송에 실패했습니다."); }
-  /** 명시적 종료만 상담 종료로 처리해 모바일 네트워크 단절이나 새로고침으로 상담이 잘못 닫히지 않게 합니다. */
-  async function endConsultation(): Promise<void> { if (!access || closing) return; setClosing(true); setError(""); try { const session = await closeGuestSession(access.session.id, access.guestToken); clearStoredGuestAccess(accessKey); setAccess((current) => current ? { ...current, session } : current); setShowCloseConfirm(false); } catch (reason) { setError(reason instanceof Error ? reason.message : "상담을 종료하지 못했습니다."); } finally { setClosing(false); } }
+  async function send(event: FormEvent): Promise<void> { event.preventDefault(); const content = input.trim(); if (!content || !access || !["WAITING", "ACTIVE"].includes(access.session.status) || !socketRef.current) return; setInput(""); const result = await socketRef.current.emitWithAck("chat:message", { sessionId: access.session.id, clientMessageId: crypto.randomUUID(), content }); if (!result?.ok) setError(result?.error?.message ?? "메시지 전송에 실패했습니다."); }
 
   if (screen === "loading") return <div className="center-card"><div className="spinner"/><h1>{t("상담을 준비하고 있습니다")}</h1><p>{t("객실 접근 정보를 안전하게 확인하는 중입니다.")}</p></div>;
   if (screen === "consent") return <div className="center-card"><div className="consent-card"><span className="eyebrow">HOTEL SUPPORT</span><h1>{t("실시간 상담 시작")}</h1><p>{t("상담은 최대 15분 동안 진행되며 텍스트 메시지만 지원합니다.")}</p><label>{t("상담 언어")}<select value={language} onChange={(event) => { const selected=event.target.value; setLanguage(selected); setUiLanguage(normalizeGuestUiLanguage(selected)); }}><option value="ja">日本語</option><option value="en">English</option><option value="ko">한국어</option><option value="zh">中文</option></select></label><label className="agreement"><input type="checkbox" checked={agreed} onChange={(event) => setAgreed(event.target.checked)} /><span>{t("상담 내용이 서비스 제공과 안전한 운영을 위해 저장될 수 있음을 확인했습니다. 비밀번호와 결제정보는 입력하지 않겠습니다.")}</span></label><button onClick={() => void startConsultation()} disabled={!agreed || starting}>{t(starting ? "상담 준비 중…" : "상담 시작")}</button></div></div>;
   if (screen === "error" || !access) return <div className="center-card error-state"><h1>{t("상담을 시작할 수 없습니다")}</h1><p>{t(error)}</p><code>?accessKey=demo-room-access-1201</code></div>;
-  const writable = access.session.status === "ACTIVE" && !!access.session.expiresAt && new Date(access.session.expiresAt).getTime() > now;
-  const timerText = ["CLOSED", "EXPIRED"].includes(access.session.status) ? t("종료") : access.session.status === "WAITING" ? t("수락 후 15:00") : remainingTime(access.session.expiresAt!, now);
-  return <main className="guest-shell"><header><div><strong>{t("호텔 고객지원")}</strong><span>{access.session.room.hotel.name} · {access.session.room.roomNumber}{roomSuffix}</span></div><div className="guest-header-actions"><span className={`online ${connection === "연결됨" ? "ok" : ""}`}>● {t(connection)}</span>{["WAITING", "ACTIVE"].includes(access.session.status) && <button type="button" className="guest-close" onClick={() => setShowCloseConfirm(true)}>{t("상담 종료")}</button>}</div></header><section className={`notice ${access.session.status.toLowerCase()}`}>{t(access.session.status === "WAITING" ? "상담원 연결을 기다리고 있습니다. 연결되면 메시지를 보낼 수 있습니다." : access.session.status === "ACTIVE" ? "상담원이 연결되었습니다. 개인정보나 결제 비밀번호는 전송하지 마세요." : "상담이 종료되었습니다. 더 이상 메시지를 보낼 수 없습니다.")}</section>{error && <section className="error-box">{t(error)}</section>}<section className="messages" ref={messagesRef}>{messages.length === 0 && <div className="empty">{t(access.session.status === "WAITING" ? "잠시만 기다려 주세요." : "첫 메시지를 보내보세요.")}</div>}{messages.map((message) => <div key={message.id} className={`message ${message.senderType === "GUEST" ? "guest" : "agent"}`}><small>{t(message.senderType === "GUEST" ? "나" : "상담원")} · {new Date(message.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</small><p>{message.content}</p></div>)}</section><footer><div className="timer"><span>{t("남은 상담 시간")}</span><strong>{timerText}</strong></div><form className="composer" onSubmit={send}><input aria-label={t("메시지")} value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder={t(writable ? "메시지를 입력하세요" : "상담원 연결 또는 종료 상태를 확인하세요")} disabled={!writable}/><button disabled={!writable || !input.trim()}>{t("전송")}</button></form></footer>{showCloseConfirm && <div className="guest-modal-backdrop"><section className="guest-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="guest-close-title"><h2 id="guest-close-title">{t("상담을 종료할까요?")}</h2><p>{t("종료하면 더 이상 메시지를 보낼 수 없습니다.")}</p><div><button type="button" className="cancel" onClick={() => setShowCloseConfirm(false)} disabled={closing}>{t("취소")}</button><button type="button" className="confirm" onClick={() => void endConsultation()} disabled={closing}>{t(closing ? "종료 중…" : "상담 종료")}</button></div></section></div>}</main>;
+  const writable = access.session.status === "WAITING"
+    || (access.session.status === "ACTIVE" && access.session.expiresAt !== null && new Date(access.session.expiresAt).getTime() > now);
+  return <main className="guest-shell"><header><div><strong>{t("호텔 고객지원")}</strong><span>{access.session.room.hotel.name} · {access.session.room.roomNumber}{roomSuffix}</span></div><div className="guest-header-actions"><span className={`online ${connection === "연결됨" ? "ok" : ""}`}>● {t(connection)}</span></div></header>{access.session.status !== "WAITING" && <section className={`notice ${access.session.status.toLowerCase()}`}>{t(access.session.status === "ACTIVE" ? "상담원이 연결되었습니다. 개인정보나 결제 비밀번호는 전송하지 마세요." : "상담이 종료되었습니다. 더 이상 메시지를 보낼 수 없습니다.")}</section>}{error && <section className="error-box">{t(error)}</section>}<section className="messages" ref={messagesRef}>{messages.length === 0 && <div className="empty">{t("첫 메시지를 보내보세요.")}</div>}{messages.map((message) => <div key={message.id} className={`message ${message.senderType === "GUEST" ? "guest" : message.senderType === "SYSTEM" ? "system" : "agent"}`}><small>{t(message.senderType === "GUEST" ? "나" : message.senderType === "SYSTEM" ? "호텔 안내" : "상담원")} · {new Date(message.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</small><p>{message.content}</p></div>)}</section><footer><form className="composer" onSubmit={send}><input aria-label={t("메시지")} value={input} onChange={(e) => setInput(e.target.value)} maxLength={1000} placeholder={t(writable ? "메시지를 입력하세요" : "상담원 연결 또는 종료 상태를 확인하세요")} disabled={!writable}/><button disabled={!writable || !input.trim()}>{t("전송")}</button></form></footer></main>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(<React.StrictMode><LanguageProvider><GuestApp /></LanguageProvider></React.StrictMode>);

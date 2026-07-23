@@ -1,8 +1,10 @@
 import { ConflictException, ForbiddenException } from "@nestjs/common";
 
-/** 상담 수락이 가능한 유일한 상태를 중앙 정책으로 관리합니다. */
-export function assertCanAccept(status: string, agentId: string | null): void {
-  if (status !== "WAITING" || agentId) throw new ConflictException("이미 수락되었거나 대기 중이 아닌 상담입니다.");
+/** 새 WAITING을 열거나 현재 담당자가 자기 ACTIVE 상담을 다시 여는 경우만 허용합니다. */
+export function assertCanOpen(status: string, agentId: string | null, requesterId: string): void {
+  if (status === "WAITING" && agentId === null) return;
+  if (status === "ACTIVE" && agentId === requesterId) return;
+  throw new ConflictException("이미 다른 Agent가 열었거나 진행 가능한 상담이 아닙니다.");
 }
 
 /** 상담 종료는 담당 Agent 또는 관리자만 가능하도록 검사합니다. */
@@ -22,6 +24,5 @@ export function canStaffReadSession(status: string, assignedAgentId: string | nu
 
 /** 화면 타이머가 아니라 서버 시각으로 만료 여부를 판단합니다. 같은 시각도 이미 만료된 것으로 처리합니다. */
 export function isSessionExpired(expiresAt: Date | null, now: Date = new Date()): boolean {
-  // WAITING은 수락 전까지 expiresAt이 null이며 상담 제한 시간 만료 대상으로 보지 않습니다.
   return expiresAt !== null && expiresAt.getTime() <= now.getTime();
 }

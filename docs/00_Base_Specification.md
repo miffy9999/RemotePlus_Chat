@@ -13,7 +13,7 @@
 
 호텔 객실에 인쇄하여 비치한 고정 QR 코드 또는 전용 링크를 통해 투숙객이 별도의 앱 설치나 회원가입 없이 콜센터 직원과 실시간으로 채팅할 수 있도록 한다. QR 코드는 객실 생성 때 한 번 발급된 고객 전용 URL을 그대로 담으며 별도의 유효기간이나 정기 갱신을 두지 않는다.
 
-채팅 세션은 객실을 기준으로 생성하며, 한 번의 상담은 최대 15분 동안만 사용할 수 있다. 상담원이 종료하거나 제한 시간이 지나면 해당 세션에서는 더 이상 메시지를 보낼 수 없어야 한다.
+채팅 세션은 객실을 기준으로 생성한다. Guest는 Agent 배정 전 `WAITING`에서도 메시지를 보내 DB에 저장할 수 있으며 대기 시간만으로 만료되지 않는다. 15분 제한은 Agent가 대화를 처음 연 시점부터 계산하고, 상담원이 종료하거나 제한 시간이 지나면 더 이상 메시지를 보낼 수 없어야 한다.
 
 ### MVP 목표
 
@@ -77,7 +77,7 @@ flowchart LR
 
 #### 사용 제한
 
-- Agent 수락 시점부터 15분 경과 후 메시지 전송 차단
+- 15분 경과 후 메시지 전송 차단
 - 종료된 세션 재사용 차단
 - 동일 객실의 과도한 세션 생성 차단
 - 비정상적인 반복 메시지 차단
@@ -174,7 +174,6 @@ flowchart LR
 
 - 투숙객 접근 키 검증
 - 관리자·Agent 공통 직원 로그인과 계정 역할 판별
-- 아이디만 로컬에 저장하거나 브라우저 비밀번호 관리자를 사용하는 선택형 로그인 정보 저장
 - 로그인한 직원의 현재 비밀번호 확인 후 새 비밀번호 변경
 - 비밀번호 변경 시 기존 무기한 직원 토큰 전체 무효화와 재로그인
 - 역할별 접근 권한 확인
@@ -271,7 +270,7 @@ flowchart LR
 초기 화면은 공통 직원 로그인으로 시작하고 인증된 역할에 따라 관리자 페이지 또는 Agent 페이지로 자동 분기한다. 관리자 페이지는 다음 최소 관리 기능을 포함한다.
 
 - 관리자 인증 및 Agent 페이지와의 권한 분리
-- 새 DB의 무료 테스트 계정은 관리자 `admin / admin`, Agent `agent01 / agent01`로 만들고 DB에는 bcrypt 해시로만 저장한다. 시드는 기존 직원 계정을 발견하면 비밀번호를 포함한 모든 필드를 그대로 보존해 배포·재시작 뒤 사용자 변경값이 유지되게 한다.
+- 현재 무료 테스트 배포의 고정 계정은 관리자 `admin / admin`, Agent `agent01 / agent01`을 사용하고 비밀번호 길이·문자 조합은 제한하지 않되 DB에는 bcrypt 해시로만 저장
 - Agent 추가 및 기본 계정 목록 조회
 - 호텔 추가 및 호텔별 룸 추가
 - 호텔 필터를 이용한 룸 목록 조회
@@ -354,9 +353,9 @@ flowchart LR
 ## 7. 상담 상태 설계
 
 ```text
-WAITING     상담원이 입장하기 전(15분 제한 미시작)
+WAITING     상담원이 입장하기 전
 ACTIVE      상담 진행 중
-CLOSED      상담원 또는 고객이 정상 종료
+CLOSED      상담원이 정상 종료
 EXPIRED     제한 시간이 지나 자동 종료
 CANCELLED   상담 시작 전 취소
 BLOCKED     관리 정책에 의해 차단
@@ -367,9 +366,8 @@ BLOCKED     관리 정책에 의해 차단
 ```mermaid
 stateDiagram-v2
     [*] --> WAITING
-    WAITING --> ACTIVE: 상담원 수락
-    WAITING --> CLOSED: 고객 종료
-    ACTIVE --> CLOSED: 상담원 또는 고객 종료
+    WAITING --> ACTIVE: Agent가 대화 열기
+    ACTIVE --> CLOSED: 상담원 종료
     ACTIVE --> EXPIRED: 15분 경과
     CLOSED --> [*]
     EXPIRED --> [*]
@@ -503,6 +501,8 @@ erDiagram
     HOTEL {
         uuid id PK
         string name
+        text welcomeMessage
+        text welcomeMessageEn
         string status
         datetime createdAt
     }
@@ -519,6 +519,7 @@ erDiagram
         uuid id PK
         uuid roomId FK
         string keyHash
+        string encryptedKey
         string status
         datetime expiresAt
         datetime createdAt
@@ -529,6 +530,7 @@ erDiagram
         string name
         string loginId
         string passwordHash
+        int tokenVersion
         string role
         string status
         datetime createdAt
@@ -540,10 +542,12 @@ erDiagram
         uuid agentId FK
         string status
         string language
+        string guestTokenHash
         datetime startedAt
-        datetime expiresAt
+        datetime expiresAt "nullable: WAITING은 null"
         datetime closedAt
         string closeReason
+        datetime lastActivityAt
         datetime createdAt
     }
 
@@ -607,14 +611,12 @@ POST /api/auth/login
 GET /api/agent/chat-sessions
 ```
 
-목록은 최근 활동 순으로 반환하되 `OPEN`과 `COMPLETED` 범위를 지원한다. 화면은 대기·진행 상담만 5초마다 갱신하고 공동 완료 로그는 최초 진입·상태 변경·60초 주기에 갱신한다. 완료 로그는 호텔별로 필터링할 수 있으며 기록 상세는 실시간 방에 들어가지 않는 읽기 전용 모달로 연다. 공개 응답에는 투숙객 토큰 해시·직원 비밀번호 해시·토큰 버전을 포함하지 않는다.
+목록은 전체 상담을 최근 활동 순으로 반환하며, 화면은 역할별 진행 업무와 공동 완료 로그를 분리한다. 완료 로그는 호텔별로 필터링할 수 있다.
 
-직원 목록 폴링의 REST 제한은 원본 JWT를 저장하지 않는 `IP + Bearer 토큰 지문` 단위로 적용해 동일 NAT의 여러 상담원이 서로의 5초 폴링 한도를 소진하지 않게 한다.
-
-### 상담원 수락
+### Agent 대화 열기
 
 ```http
-POST /api/agent/chat-sessions/{sessionId}/accept
+POST /api/agent/chat-sessions/{sessionId}/open
 ```
 
 ### WebSocket 이벤트
@@ -625,6 +627,7 @@ chat:message
 chat:message-accepted
 chat:session-updated
 chat:session-closed
+chat:inbox-updated
 chat:error
 ```
 
@@ -730,7 +733,7 @@ flowchart TD
 5. 양쪽에서 실시간 텍스트 메시지를 주고받을 수 있다.
 6. 새로고침하거나 잠시 연결이 끊겨도 진행 중인 상담으로 재접속할 수 있다.
 7. 세션별 메시지가 서로 섞이지 않는다.
-8. Agent 수락 시점부터 15분이 지나면 서버가 세션을 자동 종료한다.
+8. 15분이 지나면 서버가 세션을 자동 종료한다.
 9. 종료된 세션에서는 추가 메시지를 보낼 수 없다.
 10. 콜센터 직원이 상담을 직접 종료할 수 있다.
 11. 인증되지 않은 사용자는 콜센터 화면에 접근할 수 없다.

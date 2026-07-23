@@ -43,17 +43,17 @@ describe("게스트 상담 기기 저장소", () => {
     expect(readStoredGuestAccess("room-a", storage)).toBeNull();
   });
 
-  it("브라우저 시각 기준으로 만료된 상담 정보를 즉시 제거한다", () => {
+  it("브라우저 시각 기준으로 만료된 ACTIVE 상담 정보를 즉시 제거한다", () => {
     const storage = memoryStorage();
     saveStoredGuestAccess("room-a", { ...validAccess, session: { ...validAccess.session, status: "ACTIVE", expiresAt: "2026-07-22T04:00:00.000Z" } }, storage);
     expect(readStoredGuestAccess("room-a", storage, new Date("2026-07-22T04:00:01.000Z").getTime())).toBeNull();
     expect(storage.getItem("hotel-chat-guest:room-a")).toBeNull();
   });
 
-  it("수락 전 WAITING 상담은 만료 시각 없이 복원한다", () => {
+  it("만료시각이 없는 WAITING 상담은 시간이 지나도 복구한다", () => {
     const storage = memoryStorage();
     saveStoredGuestAccess("room-a", validAccess, storage);
-    expect(readStoredGuestAccess("room-a", storage, Date.now() + 365 * 24 * 60 * 60 * 1000)).toEqual(validAccess);
+    expect(readStoredGuestAccess("room-a", storage, new Date("2026-08-22T04:00:01.000Z").getTime())).toEqual(validAccess);
   });
 
   it.each(["CLOSED", "EXPIRED"] as const)("%s 상담 정보는 재접속에 사용하지 않고 제거한다", (status) => {

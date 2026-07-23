@@ -22,6 +22,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
   private readonly logger = new Logger(ChatGateway.name);
   private readonly messageRates = new FixedWindowRateLimiter();
+  private readonly staffInboxRoom = "staff:inbox";
 
   constructor(private readonly auth: AuthService, private readonly sessions: ChatSessionsService, private readonly messages: MessagesService) {}
 
@@ -57,7 +58,11 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   /** 인증된 직원 소켓을 공용 운영 방에 넣어 고객 종료·수락 상태를 모든 Agent 목록에 즉시 전달합니다. */
   handleConnection(socket: Socket): void {
     const identity = socket.data.identity as RealtimeIdentity | undefined;
-    if (identity?.kind === "staff") void socket.join(this.staffRoom());
+    if (identity?.kind === "staff") {
+      // 전체 상태 동기화 방과 새 문의 알림 방을 한 번의 연결 처리에서 함께 구독해 중복 구현을 피합니다.
+      void socket.join(this.staffRoom());
+      void socket.join(this.staffInboxRoom);
+    }
   }
 
   /**
@@ -110,6 +115,12 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   sessionClosed(session: { id: string }): void {
     this.server.to(this.room(session.id)).emit(CHAT_EVENTS.sessionClosed, session);
     this.server.to(this.staffRoom()).emit(CHAT_EVENTS.sessionClosed, session);
+  }
+
+  /** 새 상담이나 WAITING Guest 문의를 직원 전용 방에 알려 목록 폴링 전에도 갱신하게 합니다. */
+  @OnEvent("chat.inbox.updated")
+  inboxUpdated(payload: { sessionId: string; reason: string }): void {
+    this.server.to(this.staffInboxRoom).emit(CHAT_EVENTS.inboxUpdated, payload);
   }
 
   private identity(socket: Socket): RealtimeIdentity {

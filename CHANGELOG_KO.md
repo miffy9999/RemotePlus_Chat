@@ -1,135 +1,94 @@
 # 프로젝트 변경 이력
 
-## 2026-07-23 11:18:21 +09:00
+## 2026-07-23 14:52:14 +09:00
 
 ### 수정한 파일
 
-- 고객 종료 API·상담 시간 기준·마이그레이션·수명주기 테스트: `apps/server/prisma/schema.prisma`, `apps/server/prisma/migrations/20260723090000_start_timer_on_accept/migration.sql`, `apps/server/src/modules/chat-sessions/*`, `apps/server/src/modules/messages/*`, `apps/server/tests/chat-session-lifecycle.spec.ts`, `apps/server/tests/session-policy.spec.ts`, `apps/server/tests/message-policy.spec.ts`, `tests/integration/verify-phase45.ts`
-- 직원 공용 상태 이벤트와 Agent 즉시 갱신: `apps/server/src/modules/realtime/chat.gateway.ts`, `apps/agent-web/src/main.tsx`, `apps/agent-web/src/api.ts`
-- Edge 서비스 워커 알림과 회귀 테스트: `apps/agent-web/src/browser-notifications.ts`, `apps/agent-web/src/browser-notifications.test.ts`, `apps/agent-web/public/notification-sw.js`, `apps/agent-web/src/i18n.tsx`
-- 고객 모바일 종료 UI·대기 복구·다국어·테스트: `apps/guest-web/src/api.ts`, `apps/guest-web/src/main.tsx`, `apps/guest-web/src/styles.css`, `apps/guest-web/src/i18n.tsx`, `apps/guest-web/src/guest-access-storage.ts`, `apps/guest-web/src/guest-access-storage.test.ts`
-- README·기준 사양·사용자 흐름·DB·UI·시스템·분석·결정·사용 매뉴얼·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/04_Database_Design.md`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/09_Analysis_Roadmap.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+- 로그인 설정: `apps/agent-web/src/login-preferences.ts`, `login-preferences.test.ts`
+- Agent 화면: `apps/agent-web/src/main.tsx`, `i18n.tsx`, `styles.css`, `conversation-logs.test.ts`
+- 상담·메시지·실시간 서버: `chat-sessions.controller.ts`, `chat-sessions.service.ts`, `messages.service.ts`, `chat.gateway.ts`
+- 서버 테스트: `chat-session-list.spec.ts`, `chat-session-lifecycle.spec.ts`
+- 원격 `main`에서 병합된 보안·알림·배포·마이그레이션 파일과 관련 문서
 
-### 수정 내용과 이유
+### 수정 내용
 
-- 고객 화면에 토큰 검증형 `상담 종료` API와 앱 내부 확인창을 추가했습니다. 브라우저 탭 닫기·새로고침·모바일 망 전환은 실제 종료와 구분할 수 있으므로 자동 종료하지 않고 명시적 버튼만 종료로 처리합니다.
-- 인증된 직원 소켓을 공용 운영 방에 참가시켜 고객 종료·상담 수락·자동 만료 상태를 모든 Agent 목록에 즉시 전파합니다. 열린 담당 채팅은 기존 상담 방 이벤트로 바로 읽기 전용 종료 화면으로 바뀌고, 목록은 5초 폴링을 기다리지 않고 해당 행을 제거합니다.
-- WAITING의 `expiresAt`을 null로 바꾸고 Agent 수락 갱신에서 `startedAt`과 정확히 15분 뒤 `expiresAt`을 함께 설정했습니다. 배포 마이그레이션은 기존 WAITING과 ACTIVE 행을 새 기준으로 보정합니다.
-- Edge에서 직접 `new Notification()` 경로가 표시되지 않는 환경을 보완하기 위해 HTTPS 서비스 워커 등록과 `showNotification()`을 우선 사용하고, 권한 차단·등록 실패 안내를 추가했습니다. 앱 팝업·제목 깜빡임·선택형 알림음은 브라우저 시스템 알림 실패와 독립적으로 유지합니다.
-- 무료 Vercel·Render 부하를 늘리는 Web Push 구독·외부 푸시 서버는 추가하지 않았으며 기존 Socket.IO 이벤트와 정적 서비스 워커만 사용합니다.
+- 원격 `origin/main`을 현재 기능 브랜치에 병합하고 파일 충돌을 해소했다.
+- 직원 로그인 화면의 `아이디 저장`과 `로그인 정보 저장`은 원격 `main` 구현을 기준으로 유지했다.
+- 나머지 통합 로그인, 관리자 대시보드, LINE형 Agent 화면, Guest 다국어·대기 중 선메시지 흐름은 현재 브랜치 구현을 유지했다.
+- 실시간 연결 시 직원 공용 방과 상담 수신함 방을 모두 구독하도록 중복 연결 코드를 하나로 합쳤다.
+- 상담 목록 범위(`OPEN`, `COMPLETED`) 최적화와 Agent별 열람 권한, 외부 응답의 민감정보 제거를 함께 적용했다.
+- 원격 `main`의 Guest 상담 종료 서버 API, 요청 빈도 제한, 브라우저 알림, 비밀번호 표시 전환, DB 보정 마이그레이션과 Agent 수락 시점 타이머 마이그레이션을 보존했다.
+- 현재 LINE형 Log 화면 구조에 맞도록 회귀 테스트를 수정하고, 비밀번호 표시 전환과 Guest 종료 API 수명주기 테스트를 함께 통과시켰다.
+
+### 수정 이유
+
+GitHub 병합 전에 발생한 충돌을 해결하면서 어느 한쪽을 통째로 선택해 기존 UI·상담 정책 또는 원격 `main`의 보안·운영 보완 기능이 사라지는 회귀를 막기 위해서다.
 
 ### 확인 방법
 
-- 서버 14개 테스트 스위트 52개, Guest 14개, Agent 50개 테스트를 통과했습니다.
-- 전체 TypeScript 검사, 서버·Agent·Guest 프로덕션 빌드와 `git diff --check`를 통과했습니다.
-- 배포 후 고객 WAITING 화면에서 시간 표시가 `수락 후 15:00`인지, Agent 수락 직후 양쪽 타이머가 15분부터 시작하는지, 고객 종료 직후 Agent 열린 화면과 목록이 바뀌는지 확인합니다.
-- Edge의 HTTPS Agent 주소에서 `브라우저 알림 켜기`를 눌러 허용한 뒤 탭을 백그라운드로 보내 새 상담·고객 메시지 운영체제 알림을 확인합니다.
+- `pnpm lint`: 전체 성공.
+- `pnpm test`: 서버 53개, Agent 50개, Guest 14개 전부 성공.
+- `pnpm build`: 공유 패키지·서버·Agent 웹·Guest 웹 전체 운영 빌드 성공.
+- 충돌 표식과 미해결 파일이 없고, Git 공백 검사도 통과하는지 최종 확인했다.
 
-## 2026-07-22 22:05:16 +09:00
+## 2026-07-23 14:23:52 +09:00
 
 ### 수정한 파일
 
-- 기존 직원 비밀번호 재시드 차단과 회귀 테스트: `apps/server/prisma/seed.ts`, `apps/server/tests/password-policy.spec.ts`, `.env.example`, `compose.yaml`, `render.yaml`
-- 무료 Render 사용자 기동·대기 안내와 테스트: `apps/agent-web/src/api.ts`, `apps/agent-web/src/main.tsx`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/api-login.test.ts`
-- README·기준 사양·설계·결정·매뉴얼·배포·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/08_System_Blueprint.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Free_Deployment_Guide.md`, `docs/12_Feature_Status.md`
+- 직원 로그인: `apps/agent-web/src/main.tsx`, `login-preferences.ts`, `login-preferences.test.ts`, `staff-routing.test.ts`, `i18n.tsx`, `styles.css`
+- 문서: `README.md`, `docs/07_UI_Structure.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
 
-### 수정 내용과 이유
+### 수정 내용
 
-- 과거 Render 설정에 `SEED_RESET_EXISTING_PASSWORDS=true`가 남거나 코드 배포 때 시드가 다시 실행되면 변경한 비밀번호가 과거 시드 값으로 되돌아갈 수 있던 경로를 확인했습니다.
-- 재설정 환경변수와 조건 분기 자체를 삭제하고 두 기본 직원 upsert의 기존 행 갱신을 항상 빈 객체로 고정해, 시드 실행 횟수와 환경값에 관계없이 기존 비밀번호·토큰 버전을 건드릴 수 없게 했습니다.
-- 과거 허용된 세 계정 복구 마이그레이션 외에 새 데이터 마이그레이션이 직원 비밀번호를 변경하면 테스트가 실패하도록 회귀 경계를 추가했습니다.
-- Render 무료 Web Service는 15분간 HTTP·WebSocket 수신이 없으면 휴면하고 다음 요청에서 약 1분간 기동될 수 있으므로, 로그인 페이지 진입 시 헬스 요청을 한 번 보내 기동을 앞당기고 4초 이상 지연되면 사용자에게 원인을 안내합니다.
-- 유료 전용 pre-deploy 명령이나 무료 인스턴스를 계속 깨우는 외부 핑은 사용하지 않아 무료 플랜과 배포 안전성을 유지합니다.
+- 원격 `origin/main`의 직원 로그인 구현 중 `아이디 저장`과 `로그인 정보 저장` 기능만 현재 LINE형 Agent·Admin·Guest 작업본에 이식했다.
+- `아이디 저장`은 로그인 ID와 선택 모드만 `localStorage`에 기록하고 비밀번호는 저장하지 않는다.
+- `로그인 정보 저장`은 앱 저장소에 비밀번호를 남기지 않고 지원 브라우저의 표준 비밀번호 관리자에 저장을 요청한다.
+- 저장 모드 선택·해제, 앱 저장소에 비밀번호가 남지 않는지, 비밀번호 관리자 지원 여부와 무관하게 로그인이 계속되는지를 단위 테스트로 검증한다.
+
+### 수정 이유
+
+원격 `main`의 로그인 편의 기능과 보안 방식을 사용하되, 이번 브랜치에서 완성한 상담 정책·대시보드·LINE형 Agent UI·Guest 다국어 UI는 그대로 유지하기 위해서다.
 
 ### 확인 방법
 
-- 시드의 기존 Agent update 불변, 새 비밀번호 데이터 마이그레이션 금지와 로그인 헬스 사전 요청·실패 격리를 자동 테스트합니다.
-- 서버·Agent·Guest 전체 테스트, 타입 검사, 프로덕션 빌드와 `git diff --check`를 실행합니다.
-- 배포 후 비밀번호를 한 번 변경하고 Render 재배포 뒤 새 비밀번호 성공·이전 비밀번호 거부를 실서버에서 확인합니다.
+- `pnpm lint`: 전체 성공.
+- `pnpm test`: 서버 42개, Agent 42개, Guest 14개 전부 성공.
+- `pnpm build`: 공유 패키지·서버·Agent 웹·Guest 웹 전체 운영 빌드 성공.
+- 기존의 “항상 빈 로그인 ID” 회귀 테스트는 저장 설정을 통한 초기화와 테스트 계정 하드코딩 방지 검사로 변경했다.
 
-## 2026-07-22 15:57:15 +09:00
+## 2026-07-23 14:18:00 +09:00
 
 ### 수정한 파일
 
-- 로그인 저장 환경설정·브라우저 비밀번호 관리자 연동·테스트: `apps/agent-web/src/login-preferences.ts`, `apps/agent-web/src/login-preferences.test.ts`, `apps/agent-web/src/main.tsx`, `apps/agent-web/src/staff-routing.test.ts`
-- 비밀번호 표시·숨김 UI·테스트: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/password-change.test.ts`
-- README·사양·흐름·UI·설계·매뉴얼·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+- DB·마이그레이션: `apps/server/prisma/schema.prisma`, `20260723090000_guest_prechat_and_hotel_welcome`, `20260723130000_hotel_english_welcome_message`
+- 상담·메시지·실시간 서버: `chat-sessions.service.ts`, `chat-sessions.controller.ts`, `session-policy.ts`, `messages.service.ts`, `message-policy.ts`, `chat.gateway.ts`, `packages/shared/src/index.ts`
+- 관리자 API: `admin.controller.ts`, `admin.service.ts`, `update-hotel-welcome-message.dto.ts`
+- 웹: Agent·Admin `api.ts`, `main.tsx`, `styles.css`, `i18n.tsx`; Guest `api.ts`, `main.tsx`, `styles.css`, `i18n.tsx`, `guest-access-storage.ts`
+- 테스트: `session-policy.spec.ts`, `message-policy.spec.ts`, `guest-access-storage.test.ts`
+- 문서: README, ROADMAP, 원본·기본 사양서, 요구사항, 흐름, DB, API, 체크리스트, UI, 설계도, 분석 로드맵, 결정 기록, 매뉴얼, 기능 현황
 
-### 수정 내용과 이유
+### 수정 내용
 
-- 로그인 화면에 서로 선택 가능한 `아이디 저장`과 `로그인 정보 저장` 버튼을 추가하고 다시 누르면 선택이 해제되게 했습니다.
-- 앱의 localStorage에는 저장 모드와 ID만 기록하며, 비밀번호 저장은 지원 브라우저의 Credential Management/비밀번호 관리자에 위임해 평문 비밀번호를 앱 저장소에 남기지 않습니다.
-- 비밀번호 변경 모달의 현재·새·확인 입력칸마다 독립적인 눈 아이콘을 추가하고 44px 터치 영역, 키보드 버튼과 스크린 리더용 표시·숨김 이름을 적용했습니다.
-- 기존 직원 JWT는 계속 탭 단위 sessionStorage만 사용하므로 로그인 저장 선택이 인증 수명이나 권한 경계를 바꾸지 않습니다.
+- 작업 기준 경로를 `RemotePlus_Chat`으로 바로잡고, 이 저장소에 있던 통합 로그인·비밀번호 변경·고정 QR·알림·30일 로그 정리를 보존한 채 `chat_app`의 목요일 작업을 기능 단위로 병합했다.
+- `Hotel.welcomeMessage`, `welcomeMessageEn`과 nullable `ChatSession.expiresAt`을 추가했다. WAITING은 대기 시간으로 만료하지 않고 Guest 메시지와 호텔 SYSTEM 안내문을 먼저 저장한다.
+- Agent가 LINE형 목록에서 새 문의를 열 때 담당자·시작시각·15분 만료시각을 원자 갱신한다. Current/Log, 검색·호텔·언어 필터, 한국어·일본어 UI를 적용했다.
+- 최신 원본의 새 상담·고객 메시지 팝업, 선택형 알림음, 브라우저 알림, 탭 제목 점멸을 LINE형 Agent 화면에도 연결해 UI 교체로 인한 기능 누락을 막았다.
+- 관리자 화면을 호텔·룸 관리 → 호텔별 자동 안내문 → Agent 관리 순서의 KPI 대시보드로 바꾸고 등록 호텔 빠른 선택을 추가했다.
+- Guest WAITING 노란 안내 상자와 남은 시간 표시를 제거하고 Agent 연결 전 메시지 전송을 활성화했다.
+- 기존에 수정 중이던 `docs/04_Database_Design.md`, `docs/08_System_Blueprint.md`, `docs/12_Feature_Status.md` 내용은 덮어쓰지 않고 현재 문서 위에 병합했다.
 
-### 확인 방법
+### 수정 이유
 
-- 저장 모드 복구·해제·비밀번호 미저장·브라우저 관리자 위임과 세 눈 버튼을 자동 테스트합니다.
-- Agent 웹 테스트·타입 검사·프로덕션 빌드와 전체 회귀 QA를 실행합니다.
-
-## 2026-07-22 15:35:20 +09:00
-
-### 수정한 파일
-
-- Render 실DB 계정 최종 일회성 복구와 배포 경로 표시: `apps/server/prisma/migrations/20260722063500_enforce_free_test_credentials/migration.sql`, `apps/server/tests/password-policy.spec.ts`, `apps/server/src/modules/auth/auth.service.ts`
-- 계정 복구 기준 문서: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/10_Decision_Log.md`, `docs/12_Free_Deployment_Guide.md`
-
-### 수정 내용과 이유
-
-- 첫 복구 커밋 배포 뒤 새 `scope` API는 동작했지만 Render DB는 여전히 이전 `remote1234!` 비밀번호를 허용하고 문서의 두 비밀번호를 거부하는 것을 실서버 QA로 확인했습니다.
-- Render의 기존 Prisma 적용 이력과 다시 충돌하지 않는 최신 이름의 마이그레이션을 추가해 `admin / admin`, `agent01 / agent01` 해시를 조건 없이 한 번 갱신하고 기존 무기한 토큰도 폐기합니다.
-- 시작 시드 재설정은 계속 사용하지 않으므로 이번 마이그레이션 뒤 사용자가 변경한 비밀번호는 이후 재배포에서도 유지됩니다.
-- 마이그레이션·문서만 있는 커밋을 Render가 즉시 배포하지 않는 경로 필터 상황에서도 새 마이그레이션이 실행되도록 인증 서버 소스에 같은 운영 경계를 명시해 백엔드 재배포를 유도합니다.
+잘못 사용한 이전 작업 경로의 목요일 구현을 실제 저장소로 옮기면서 동료가 이미 추가한 최신 기능과 문서 변경을 잃지 않기 위해서다.
 
 ### 확인 방법
 
-- bcrypt 해시·토큰 버전 증가·조건 없는 갱신을 자동 테스트하고 서버 타입 검사·빌드를 실행합니다.
-- 배포 뒤 두 새 비밀번호가 성공하고 이전 `remote1234!`가 두 계정 모두에서 거부되는지 실서버에서 확인합니다.
-
-## 2026-07-22 15:22:11 +09:00
-
-### 수정한 파일
-
-- 상담 공개 응답·동일 NAT 요청 제한 보안 경계와 테스트: `apps/server/src/modules/chat-sessions/session-view.ts`, `apps/server/src/modules/chat-sessions/chat-sessions.service.ts`, `apps/server/src/modules/messages/messages.service.ts`, `apps/server/src/common/security/rest-rate-limit-policy.ts`, `apps/server/src/main.ts`, `apps/server/tests/session-view.spec.ts`, `apps/server/tests/message-activity.spec.ts`, `apps/server/tests/rest-rate-limit-policy.spec.ts`
-- 열린 상담·완료 로그 분리 조회와 테스트: `apps/server/src/modules/chat-sessions/chat-sessions.controller.ts`, `apps/server/src/modules/chat-sessions/dto/list-sessions.dto.ts`, `apps/server/tests/chat-session-list.spec.ts`, `apps/agent-web/src/api.ts`, `apps/agent-web/src/main.tsx`, `apps/agent-web/src/conversation-logs.test.ts`
-- 무료 테스트 계정 일회성 복구: `apps/server/prisma/migrations/20260722062000_repair_free_test_credentials/migration.sql`, `apps/server/tests/password-policy.spec.ts`
-- README·사양·흐름·API·UI·설계·분석·결정·매뉴얼·배포·출시 점검·기능 현황: `README.md`, `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/05_API_Specification.yaml`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/09_Analysis_Roadmap.md`, `docs/10_Decision_Log.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`, `docs/12_Free_Deployment_Guide.md`, `docs/13_Commercial_Release_Checklist_KO.md`
-
-### 수정 내용과 이유
-
-- 공동 로그를 위해 Prisma의 Agent 전체 관계를 포함하면서 `passwordHash`, `tokenVersion` 같은 인증 내부값이 상담 REST·WebSocket 응답으로 노출될 수 있던 경로를 최소 필드 선택과 공용 직렬화 경계로 차단했습니다.
-- 메시지 전송 시점에 만료된 상담 이벤트가 투숙객 토큰 해시를 포함하고 고객 화면에 필요한 룸 관계를 누락해 화면 오류를 만들 수 있던 경로를 완전한 공개 상담 형식으로 교체했습니다.
-- Agent 공동 완료 로그를 활성 채팅 컴포넌트로 열어 타 Agent 방 입장 오류가 표시되던 문제를 관리자와 같은 읽기 전용 모달로 수정했습니다.
-- 5초 폴링은 `OPEN`만 조회하고 30일치 `COMPLETED` 로그는 최초 진입·상태 변경·60초마다 조회해 무료 Render DB와 전송량 부하를 줄였습니다. 구버전 Render와 겹치는 배포 구간에는 프런트가 자동으로 호환 조회합니다.
-- 직원 목록 제한 키를 원본 JWT가 아닌 `IP + 토큰 지문`으로 분리해 같은 콜센터 NAT의 여러 로그인 세션이 서로의 정상 5초 폴링 한도를 소진하지 않게 했습니다.
-- 과거 내용으로 이미 실행된 Prisma 마이그레이션이 수정 파일을 재실행하지 않아 Render에서 `admin / admin` 로그인이 되지 않던 문제를 새 일회성 마이그레이션으로 복구했습니다. 두 기본 계정의 해시가 다를 때만 변경하고 토큰 버전을 올리며 이후 재배포에서는 덮어쓰지 않습니다.
-- 공동 작업자의 최신 `main`을 fast-forward pull한 뒤 변경된 공동 로그 흐름을 포함해 화이트박스 QA를 수행하고 README와 관련 문서를 현재 구현에 맞췄습니다.
-
-### 확인 방법
-
-- 서버 테스트 46개, Agent 웹 테스트 40개, Guest 웹 테스트 13개와 전체 타입 검사·프로덕션 빌드 및 `git diff --check`를 실행합니다.
-- 배포 후 두 기본 계정 역할 로그인, API 헬스 체크, Vercel 배포 상태와 공개 상담 응답의 인증 내부 필드 부재를 확인합니다.
-
-## 2026-07-22 14:56:01 +09:00
-
-### 수정한 파일
-
-- 공동 상담 로그 권한: `apps/server/src/modules/chat-sessions/chat-sessions.service.ts`, `apps/server/src/modules/chat-sessions/session-policy.ts`, `apps/server/tests/session-policy.spec.ts`
-- Agent·관리자 공용 로그 UI: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/api.ts`, `apps/agent-web/src/conversation-logs.ts`, `apps/agent-web/src/conversation-logs.test.ts`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/popup-style.test.ts`
-- 사양·흐름·설계·매뉴얼·기능 현황: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
-
-### 수정 내용과 이유
-
-- 종료·만료·취소·차단된 상담을 담당자와 관계없이 모든 Agent와 관리자가 메시지까지 읽을 수 있는 공동 운영 로그로 변경했습니다.
-- 타 Agent가 담당 중인 활성 상담의 조회·종료 권한은 기존대로 차단해 실시간 업무 경계를 유지합니다.
-- Agent 화면의 본인 종료 상담 10건 제한을 없애고 전체 상담 로그와 호텔별 필터를 추가했습니다.
-- 관리자 페이지 최하단에도 같은 로그 블록과 호텔 필터를 추가하고, 기록 상세는 읽기 전용 모달로 표시합니다.
-- 로그가 많아져도 페이지가 과도하게 길어지지 않도록 목록 높이를 제한하고 내부 세로 스크롤을 적용했습니다.
-
-### 확인 방법
-
-- 다른 Agent의 완료 로그 허용·진행 상담 차단 서버 정책 테스트와 완료 상태·호텔별 UI 필터 테스트를 추가했습니다.
-- 서버 35개 테스트, Agent 웹 33개 테스트, 양쪽 타입 검사와 Agent 프로덕션 빌드가 통과했습니다.
+- `pnpm lint`: 전체 성공.
+- `pnpm test`: 서버 42개, Agent 37개, Guest 14개 전부 성공.
+- `pnpm build`: 공유 패키지·서버·Agent 웹·Guest 웹 전체 운영 빌드 성공.
+- Docker Compose 재빌드와 신규 마이그레이션 적용 성공, API `http://127.0.0.1:4100/api/health`의 서버·DB 정상 응답을 확인했다.
+- 브라우저에서 통합 로그인, 관리자 대시보드의 실제 배치, 일본어·영어 안내문 탭, LINE형 Agent 한국어·일본어 UI, Guest 일본어 기본값과 영어·한국어·중국어 전환을 확인했다.
+- Guest가 Agent 연결 전에 메시지를 전송·저장하고 Agent 목록에 즉시 나타나는지, Agent가 방을 열 때 15분이 시작되는지, Guest에는 남은 시간이 보이지 않는지 확인한 뒤 QA 상담을 정상 종료했다.
 
 ## 2026-07-22 14:35:10 +09:00
 
@@ -156,6 +115,26 @@
 
 - 로그인 ID 빈 초기값, 현재·빈 비밀번호 검증, bcrypt 변경, 토큰 버전 폐기, UI 입력 확인과 30일 보존 조건을 회귀 테스트로 확인했습니다.
 - 서버 테스트 38개와 Agent 웹 테스트 35개, 두 패키지 타입 검사·프로덕션 빌드와 `git diff --check`가 통과했습니다.
+## 2026-07-22 14:56:01 +09:00
+
+### 수정한 파일
+
+- 공동 상담 로그 권한: `apps/server/src/modules/chat-sessions/chat-sessions.service.ts`, `apps/server/src/modules/chat-sessions/session-policy.ts`, `apps/server/tests/session-policy.spec.ts`
+- Agent·관리자 공용 로그 UI: `apps/agent-web/src/main.tsx`, `apps/agent-web/src/api.ts`, `apps/agent-web/src/conversation-logs.ts`, `apps/agent-web/src/conversation-logs.test.ts`, `apps/agent-web/src/styles.css`, `apps/agent-web/src/i18n.tsx`, `apps/agent-web/src/popup-style.test.ts`
+- 사양·흐름·설계·매뉴얼·기능 현황: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 종료·만료·취소·차단된 상담을 담당자와 관계없이 모든 Agent와 관리자가 메시지까지 읽을 수 있는 공동 운영 로그로 변경했습니다.
+- 타 Agent가 담당 중인 활성 상담의 조회·종료 권한은 기존대로 차단해 실시간 업무 경계를 유지합니다.
+- Agent 화면의 본인 종료 상담 10건 제한을 없애고 전체 상담 로그와 호텔별 필터를 추가했습니다.
+- 관리자 페이지 최하단에도 같은 로그 블록과 호텔 필터를 추가하고, 기록 상세는 읽기 전용 모달로 표시합니다.
+- 로그가 많아져도 페이지가 과도하게 길어지지 않도록 목록 높이를 제한하고 내부 세로 스크롤을 적용했습니다.
+
+### 확인 방법
+
+- 다른 Agent의 완료 로그 허용·진행 상담 차단 서버 정책 테스트와 완료 상태·호텔별 UI 필터 테스트를 추가했습니다.
+- 서버 35개 테스트, Agent 웹 33개 테스트, 양쪽 타입 검사와 Agent 프로덕션 빌드가 통과했습니다.
 
 ## 2026-07-22 14:26:14 +09:00
 
