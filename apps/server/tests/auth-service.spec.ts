@@ -15,19 +15,20 @@ describe("24시간 콜센터 직원 인증", () => {
   /** 직원 로그인 JWT에는 exp를 넣지 않아 브라우저 탭을 유지하는 동안 재로그인을 요구하지 않습니다. */
   it("직원 토큰을 만료 시각 없이 발급한다", async () => {
     const passwordHash = await hash("agent01", 4);
-    const prisma = { agent: { findUnique: jest.fn().mockResolvedValue({ id: "agent-id", name: "Agent", role: "AGENT", status: "ACTIVE", passwordHash }) } };
+    const prisma = { agent: { findUnique: jest.fn().mockResolvedValue({ id: "agent-id", name: "Agent", loginId: "agent01", role: "AGENT", status: "ACTIVE", passwordHash }) } };
     const auth = new AuthService(prisma as never);
 
     const result = await auth.login("agent01", "agent01", "AGENT");
     const payload = decode(result.accessToken) as { exp?: number };
 
     expect(payload.exp).toBeUndefined();
+    expect(result.agent).toMatchObject({ name: "Agent", loginId: "agent01", role: "AGENT" });
   });
 
   /** 공통 로그인은 사용자가 역할을 미리 선택하지 않아도 저장된 역할을 그대로 반환하며 계정 조회를 반복하지 않습니다. */
   it("통합 로그인에서 관리자 역할을 한 번의 조회로 판별한다", async () => {
     const passwordHash = await hash("admin", 4);
-    const findUnique = jest.fn().mockResolvedValue({ id: "admin-id", name: "Admin", role: "ADMIN", status: "ACTIVE", passwordHash });
+    const findUnique = jest.fn().mockResolvedValue({ id: "admin-id", name: "Admin", loginId: "admin", role: "ADMIN", status: "ACTIVE", passwordHash });
     const auth = new AuthService({ agent: { findUnique } } as never);
 
     const result = await auth.login("admin", "admin");

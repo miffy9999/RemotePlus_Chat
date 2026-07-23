@@ -566,17 +566,20 @@ function LineConversationPanel({
           {session.status === "ACTIVE" && session.expiresAt && <strong>{remainingTime(session.expiresAt, now)}</strong>}
         </div>
       </header>
-      {readOnly && <div className="line-log-banner">{t("종료된 상담 기록입니다. 모든 Agent가 읽을 수 있지만 메시지는 보낼 수 없습니다.")}</div>}
-      {error && <div className="error-box line-chat-error">{error}</div>}
-      <div className="line-chat-messages">
-        {messages.length === 0 && <div className="empty">{t("아직 메시지가 없습니다.")}</div>}
-        {messages.map((message) => (
-          <article key={message.id} className={`line-bubble ${message.senderType === "AGENT" ? "mine" : message.senderType === "SYSTEM" ? "system" : "theirs"}`}>
-            <small>{t(message.senderType === "SYSTEM" ? "호텔 안내" : message.senderType === "AGENT" ? "Agent" : "Guest")} · {new Date(message.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</small>
-            <p>{message.content}</p>
-          </article>
-        ))}
-        <div ref={messageEndRef}/>
+      {/* 조건부 배너와 오류를 본문 안에 묶어도 헤더·본문·입력창의 세 행 구조가 변하지 않게 합니다. */}
+      <div className="line-conversation-body">
+        {readOnly && <div className="line-log-banner">{t("종료된 상담 기록입니다. 모든 Agent가 읽을 수 있지만 메시지는 보낼 수 없습니다.")}</div>}
+        {error && <div className="error-box line-chat-error">{error}</div>}
+        <div className="line-chat-messages">
+          {messages.length === 0 && <div className="empty">{t("아직 메시지가 없습니다.")}</div>}
+          {messages.map((message) => (
+            <article key={message.id} className={`line-bubble ${message.senderType === "AGENT" ? "mine" : message.senderType === "SYSTEM" ? "system" : "theirs"}`}>
+              <small>{t(message.senderType === "SYSTEM" ? "호텔 안내" : message.senderType === "AGENT" ? "Agent" : "Guest")} · {new Date(message.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</small>
+              <p>{message.content}</p>
+            </article>
+          ))}
+          <div ref={messageEndRef}/>
+        </div>
       </div>
       <form className="line-chat-composer" onSubmit={send}>
         <span aria-hidden="true">＋</span>
@@ -879,6 +882,17 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       <aside className="line-agent-list">
         <header className="line-agent-header">
           <div className="agent-brand">REMOTE<span>+</span></div>
+          <div
+            className="line-agent-account"
+            aria-label={`${t("로그인 계정")}: ${auth.agent.name}${auth.agent.loginId ? `, ${auth.agent.loginId}` : ""}`}
+            title={`${auth.agent.name}${auth.agent.loginId ? ` (@${auth.agent.loginId})` : ""}`}
+          >
+            <span aria-hidden="true">{auth.agent.name.slice(0, 1).toUpperCase()}</span>
+            <div>
+              <strong>{auth.agent.name}</strong>
+              <small>{auth.agent.loginId ? `@${auth.agent.loginId}` : "AGENT"}</small>
+            </div>
+          </div>
           <LanguageSwitcher/>
           <button className="link-button" aria-pressed={soundEnabled} onClick={toggleNotificationSound}>{t(soundEnabled ? "알림음 끄기" : "알림음 켜기")}</button>
           {notificationPermission !== "unsupported" && (
@@ -1321,9 +1335,11 @@ function SessionTable({
 function ConversationLogBlock({
   sessions,
   onOpen,
+  embedded = false,
 }: {
   sessions: SessionView[];
   onOpen: (session: SessionView) => void;
+  embedded?: boolean;
 }): React.JSX.Element {
   const { t } = useI18n();
   const [hotelId, setHotelId] = useState("");
@@ -1345,12 +1361,14 @@ function ConversationLogBlock({
   );
 
   return (
-    <section className="card conversation-log-card">
+    <section className={embedded ? "conversation-log-card embedded" : "card conversation-log-card"}>
       <div className="section-head">
-        <div>
-          <h2>{t("전체 상담 로그")}</h2>
-          <p>{t("모든 Agent의 종료·만료 상담을 함께 확인합니다.")}</p>
-        </div>
+        {!embedded && (
+          <div>
+            <h2>{t("전체 상담 로그")}</h2>
+            <p>{t("모든 Agent의 종료·만료 상담을 함께 확인합니다.")}</p>
+          </div>
+        )}
         <label className="filter compact-filter">
           {t("호텔 필터")}
           <select
@@ -1790,6 +1808,25 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [welcomeError, setWelcomeError] = useState("");
   const [welcomeSaved, setWelcomeSaved] = useState("");
+  const [activeAdminSection, setActiveAdminSection] = useState<
+    "hotels" | "agents" | "logs"
+  >("hotels");
+  const [adminMenuCollapsed, setAdminMenuCollapsed] = useState(
+    () => window.localStorage.getItem("remoteplus-admin-menu-collapsed") === "true",
+  );
+
+  /** 넓은 화면에서 관리 메뉴 폭을 줄인 선택을 같은 브라우저에 기억합니다. */
+  function toggleAdminMenu(): void {
+    setAdminMenuCollapsed((current) => {
+      const next = !current;
+      window.localStorage.setItem(
+        "remoteplus-admin-menu-collapsed",
+        String(next),
+      );
+      return next;
+    });
+  }
+
   async function refresh() {
     try {
       const [a, h, r, s] = await Promise.all([
@@ -1949,8 +1986,69 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         <article><span>R</span><div><small>{t("등록 룸")}</small><strong>{rooms.length}</strong></div></article>
         <article><span>↗</span><div><small>{t("Guest 주소")}</small><strong>{rooms.filter((room) => room.guestUrl).length}</strong></div></article>
       </section>
+      <div className={`admin-dashboard${adminMenuCollapsed ? " menu-collapsed" : ""}`}>
+        <aside className="admin-navigation" aria-label={t("관리 메뉴")}>
+          <div className="admin-navigation-heading">
+            <span>{t("관리 메뉴")}</span>
+            <button
+              type="button"
+              aria-label={t(adminMenuCollapsed ? "메뉴 펼치기" : "메뉴 접기")}
+              title={t(adminMenuCollapsed ? "메뉴 펼치기" : "메뉴 접기")}
+              aria-expanded={!adminMenuCollapsed}
+              onClick={toggleAdminMenu}
+            >
+              {adminMenuCollapsed ? "›" : "‹"}
+            </button>
+          </div>
+          <nav>
+            <button
+              type="button"
+              className={activeAdminSection === "hotels" ? "active" : ""}
+              aria-current={activeAdminSection === "hotels" ? "page" : undefined}
+              onClick={() => setActiveAdminSection("hotels")}
+            >
+              <span className="admin-nav-icon" aria-hidden="true">H</span>
+              <span className="admin-nav-copy">
+                <strong>{t("호텔 관리")}</strong>
+                <small>{t("호텔·객실·안내문")}</small>
+              </span>
+              <em>{hotels.length}</em>
+            </button>
+            <button
+              type="button"
+              className={activeAdminSection === "agents" ? "active" : ""}
+              aria-current={activeAdminSection === "agents" ? "page" : undefined}
+              onClick={() => setActiveAdminSection("agents")}
+            >
+              <span className="admin-nav-icon" aria-hidden="true">A</span>
+              <span className="admin-nav-copy">
+                <strong>{t("Agent 관리")}</strong>
+                <small>{t("직원 계정과 상태")}</small>
+              </span>
+              <em>{agents.length}</em>
+            </button>
+            <button
+              type="button"
+              className={activeAdminSection === "logs" ? "active" : ""}
+              aria-current={activeAdminSection === "logs" ? "page" : undefined}
+              onClick={() => setActiveAdminSection("logs")}
+            >
+              <span className="admin-nav-icon" aria-hidden="true">L</span>
+              <span className="admin-nav-copy">
+                <strong>{t("상담 로그")}</strong>
+                <small>{t("종료 상담 기록")}</small>
+              </span>
+              <em>{filterConversationLogs(sessions, "").length}</em>
+            </button>
+          </nav>
+        </aside>
+        <div className="admin-dashboard-content">
+      {activeAdminSection === "agents" && (
       <section className="card admin-agent-card">
-        <h2>{t("Agent 관리")}</h2>
+        <div className="admin-panel-title">
+          <div><span className="section-eyebrow">AGENTS</span><h2>{t("Agent 관리")}</h2><p>{t("콜센터 직원 계정과 현재 상태를 관리합니다.")}</p></div>
+          <strong>{agents.length}</strong>
+        </div>
         <form className="inline-form" onSubmit={addAgent}>
           <input
             aria-label={t("Agent 이름")}
@@ -2009,8 +2107,14 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           </table>
         </div>
       </section>
+      )}
+      {activeAdminSection === "hotels" && (
+      <>
       <section className="card admin-property-card">
-        <div className="section-head"><div><span className="section-eyebrow">PROPERTY</span><h2>{t("호텔·룸 관리")}</h2></div></div>
+        <div className="admin-panel-title">
+          <div><span className="section-eyebrow">PROPERTY</span><h2>{t("호텔·룸 관리")}</h2><p>{t("호텔과 객실, 고객 접속 QR을 한곳에서 관리합니다.")}</p></div>
+          <strong>{rooms.length}</strong>
+        </div>
         {hotelError && (
           <div className="error-box form-error" role="alert">
             {hotelError}
@@ -2156,7 +2260,19 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           <div className="welcome-actions"><span>{welcomeMessage.length}/1000</span><button disabled={!welcomeHotelId || !welcomeMessage.trim()}>{t("안내문 저장")}</button></div>
         </form>
       </section>
-      <ConversationLogBlock sessions={sessions} onOpen={setSelectedLog} />
+      </>
+      )}
+      {activeAdminSection === "logs" && (
+        <section className="card admin-log-panel">
+          <div className="admin-panel-title">
+            <div><span className="section-eyebrow">CONVERSATIONS</span><h2>{t("상담 로그")}</h2><p>{t("종료된 상담을 호텔별로 찾아 전체 대화를 확인합니다.")}</p></div>
+            <strong>{filterConversationLogs(sessions, "").length}</strong>
+          </div>
+          <ConversationLogBlock sessions={sessions} onOpen={setSelectedLog} embedded />
+        </section>
+      )}
+        </div>
+      </div>
       {qrRoom && <RoomQrModal room={qrRoom} onClose={() => setQrRoom(null)} />}
       {selectedLog && (
         <ConversationLogModal

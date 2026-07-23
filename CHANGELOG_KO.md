@@ -1,5 +1,36 @@
 # 프로젝트 변경 이력
 
+## 2026-07-23 15:54:18 +09:00
+
+### 수정한 파일
+
+- Agent·관리자 UI와 인증 저장: `apps/agent-web/src/main.tsx`, `styles.css`, `i18n.tsx`, `auth-storage.ts`
+- 로그인 응답: `apps/server/src/modules/auth/auth.service.ts`
+- UI·인증 회귀 테스트: `apps/agent-web/src/dashboard-layout.test.ts`, `auth-storage.test.ts`, `apps/server/tests/auth-service.spec.ts`
+- 원본 사양과 UI 문서: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/07_UI_Structure.md`
+- 설계·분석·사용·현황 문서: `docs/08_System_Blueprint.md`, `docs/09_Analysis_Roadmap.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`, `README.md`
+
+### 수정 내용
+
+- 원격 `main`을 fast-forward pull하여 공동 작업자의 LINE형 Agent 화면, Guest 선문의와 호텔별 자동 안내문 등 최신 변경을 반영했다.
+- Agent 상담 패널을 `헤더 / 메시지 본문 / 입력창`의 고정 3행 구조로 바꾸고 조건부 읽기 전용 안내와 오류를 메시지 본문 안에 격리했다.
+- 대화가 짧을 때 최근 말풍선을 입력창 바로 위에 정렬하고, 메시지가 많을 때는 본문만 내부 스크롤하도록 했다.
+- 직원 로그인 응답에 로그인 ID를 포함하고 Agent 헤더의 계정 칩에 표시 이름과 `@로그인ID`를 함께 보여 공용 PC에서도 현재 계정을 확인할 수 있게 했다. 구버전 저장 인증은 다음 로그인 전까지 표시 이름으로 계속 호환한다.
+- 관리자 화면을 상단 KPI, 접을 수 있는 왼쪽 관리 메뉴, 오른쪽 작업 패널의 일반적인 운영 대시보드로 재구성했다.
+- 호텔·Agent·상담 로그 메뉴 중 선택한 패널만 표시하고, 데스크톱 메뉴 접기 상태를 브라우저에 저장하며 모바일에서는 가로 탭으로 전환한다.
+- 호텔 관리 패널 안에 호텔·룸과 호텔별 Guest 자동 안내문을 함께 배치하고 Agent와 상담 로그를 독립된 관리 영역으로 분리했다.
+
+### 수정 이유
+
+조건부 요소 수에 따라 Agent 입력창이 화면 중간으로 올라가는 CSS 그리드 자동 배치 문제를 제거하고, 관리자가 긴 단일 페이지를 훑지 않고 일반적인 대시보드 방식으로 업무 영역을 전환할 수 있게 하기 위해서다.
+
+### 확인 방법
+
+- Agent 웹 단위 테스트 59개, 서버 단위 테스트 53개와 전체 프로덕션 빌드가 성공했다.
+- Chromium 1366×768에서 Agent 상담 패널·입력창 하단 좌표가 모두 뷰포트 하단 `768px`인지 확인했고, 390×844에서도 입력창 하단이 `844px`로 일치했다.
+- Chromium 1440×1000에서 관리자 호텔·Agent·상담 로그 전환과 메뉴 접기 후 `76px` 너비를 확인했다.
+- 관리자 390px 모바일 화면에서 문서 전체 가로 넘침 없이 가로 탭만 내부 스크롤되는지 확인했다.
+
 ## 2026-07-23 15:16:20 +09:00
 
 ### 수정한 파일
