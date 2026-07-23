@@ -8,18 +8,12 @@ export interface LoginPreference {
 const LOGIN_PREFERENCE_KEY = "remoteplus-staff-login-preference";
 
 /** 저장소가 차단되거나 값이 손상돼도 빈 로그인 화면으로 안전하게 복구합니다. */
-export function readLoginPreference(
-  storage: Storage = localStorage,
-): LoginPreference {
+export function readLoginPreference(storage: Storage = localStorage): LoginPreference {
   try {
     const raw = storage.getItem(LOGIN_PREFERENCE_KEY);
     if (!raw) return { mode: "NONE", loginId: "" };
     const value = JSON.parse(raw) as Partial<LoginPreference>;
-    if (
-      (value.mode === "ID" || value.mode === "CREDENTIALS") &&
-      typeof value.loginId === "string" &&
-      value.loginId.trim()
-    ) {
+    if ((value.mode === "ID" || value.mode === "CREDENTIALS") && typeof value.loginId === "string" && value.loginId.trim()) {
       return { mode: value.mode, loginId: value.loginId };
     }
     storage.removeItem(LOGIN_PREFERENCE_KEY);
@@ -30,34 +24,20 @@ export function readLoginPreference(
 }
 
 /** 비밀번호는 받지도 저장하지도 않고 사용자가 고른 모드와 ID만 브라우저 로컬 설정에 기록합니다. */
-export function saveLoginPreference(
-  mode: LoginSaveMode,
-  loginId: string,
-  storage: Storage = localStorage,
-): void {
+export function saveLoginPreference(mode: LoginSaveMode, loginId: string, storage: Storage = localStorage): void {
   try {
     if (mode === "NONE") {
       storage.removeItem(LOGIN_PREFERENCE_KEY);
       return;
     }
-    storage.setItem(
-      LOGIN_PREFERENCE_KEY,
-      JSON.stringify({
-        mode,
-        loginId: loginId.trim(),
-      } satisfies LoginPreference),
-    );
+    storage.setItem(LOGIN_PREFERENCE_KEY, JSON.stringify({ mode, loginId: loginId.trim() } satisfies LoginPreference));
   } catch {
     // 저장 실패는 인증 성공을 막지 않습니다.
   }
 }
 
 interface BrowserCredentialEnvironment {
-  PasswordCredential?: new (data: {
-    id: string;
-    name: string;
-    password: string;
-  }) => unknown;
+  PasswordCredential?: new (data: { id: string; name: string; password: string }) => unknown;
   store?: (credential: unknown) => Promise<unknown>;
 }
 
@@ -66,26 +46,15 @@ export async function requestBrowserCredentialSave(
   loginId: string,
   password: string,
   environment: BrowserCredentialEnvironment = {
-    PasswordCredential: (
-      globalThis as typeof globalThis & {
-        PasswordCredential?: BrowserCredentialEnvironment["PasswordCredential"];
-      }
-    ).PasswordCredential,
-    store:
-      typeof navigator !== "undefined" && navigator.credentials?.store
-        ? (navigator.credentials.store.bind(navigator.credentials) as (
-            credential: unknown,
-          ) => Promise<unknown>)
-        : undefined,
+    PasswordCredential: (globalThis as typeof globalThis & { PasswordCredential?: BrowserCredentialEnvironment["PasswordCredential"] }).PasswordCredential,
+    store: typeof navigator !== "undefined" && navigator.credentials?.store
+      ? navigator.credentials.store.bind(navigator.credentials) as (credential: unknown) => Promise<unknown>
+      : undefined,
   },
 ): Promise<boolean> {
   if (!environment.PasswordCredential || !environment.store) return false;
   try {
-    const credential = new environment.PasswordCredential({
-      id: loginId,
-      name: loginId,
-      password,
-    });
+    const credential = new environment.PasswordCredential({ id: loginId, name: loginId, password });
     await environment.store(credential);
     return true;
   } catch {

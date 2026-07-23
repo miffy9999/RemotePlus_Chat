@@ -22,4 +22,11 @@ describe("직원 비밀번호 변경 UI", () => {
     expect(mainSource).toContain("if (newPassword !== confirmation)");
     expect(mainSource).toContain('clearStoredAuth("ADMIN"); clearStoredAuth("AGENT")');
   });
+
+  /** 세 입력칸은 한꺼번에 노출하지 않고 각 눈 버튼으로 독립 전환하며 접근성 이름을 제공합니다. */
+  it("입력칸별 비밀번호 표시 버튼을 제공한다", () => {
+    expect(mainSource).toContain("function PasswordField");
+    expect(mainSource).toContain('aria-label={t(visible ? "비밀번호 숨기기" : "비밀번호 보기")}');
+    expect(mainSource.match(/<PasswordField/g)).toHaveLength(3);
+  });
 });

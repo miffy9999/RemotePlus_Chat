@@ -56,12 +56,11 @@ async function seed(): Promise<void> {
   const secondAccessKey = seedSecret("SEED_SECOND_ROOM_ACCESS_KEY", "demo-room-access-1202");
   await prisma.roomAccessKey.upsert({ where: { keyHash: sha256(secondAccessKey) }, update: { status: "ACTIVE", encryptedKey: encryptSecret(secondAccessKey) }, create: { roomId: secondRoom.id, keyHash: sha256(secondAccessKey), encryptedKey: encryptSecret(secondAccessKey) } });
 
-  // 새 DB에는 테스트 기본 계정을 만들되 기본 설정에서는 기존 비밀번호를 덮어쓰지 않아 사용자의 변경값을 보존합니다.
-  const resetExistingPasswords = process.env.SEED_RESET_EXISTING_PASSWORDS === "true";
+  // 시드는 신규 계정만 생성합니다. Render가 이 파일을 다시 실행해도 기존 계정과 사용자가 변경한 비밀번호는 절대 갱신하지 않습니다.
   const adminPassword = await hash(seedPassword("SEED_ADMIN_PASSWORD", "admin"), 12);
   const agentPassword = await hash(seedPassword("SEED_AGENT_PASSWORD", "agent01"), 12);
-  await prisma.agent.upsert({ where: { loginId: "admin" }, update: resetExistingPasswords ? { passwordHash: adminPassword } : {}, create: { name: "시스템 관리자", loginId: "admin", passwordHash: adminPassword, role: "ADMIN" } });
-  await prisma.agent.upsert({ where: { loginId: "agent01" }, update: resetExistingPasswords ? { passwordHash: agentPassword } : {}, create: { name: "김상담", loginId: "agent01", passwordHash: agentPassword, role: "AGENT" } });
+  await prisma.agent.upsert({ where: { loginId: "admin" }, update: {}, create: { name: "시스템 관리자", loginId: "admin", passwordHash: adminPassword, role: "ADMIN" } });
+  await prisma.agent.upsert({ where: { loginId: "agent01" }, update: {}, create: { name: "김상담", loginId: "agent01", passwordHash: agentPassword, role: "AGENT" } });
 }
 
 seed().finally(async () => prisma.$disconnect());

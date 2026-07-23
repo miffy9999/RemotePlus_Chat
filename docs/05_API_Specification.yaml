@@ -96,8 +96,12 @@ paths:
         - name: status
           in: query
           schema: { type: string, enum: [WAITING, ACTIVE, CLOSED, EXPIRED, CANCELLED, BLOCKED] }
+        - name: scope
+          in: query
+          description: 5초 폴링용 열린 상담과 저주기 공동 완료 로그를 분리하며 status가 있으면 status를 우선 적용
+          schema: { type: string, enum: [OPEN, COMPLETED] }
       responses:
-        "200": { description: 각 상담에 lastActivityAt을 포함한 최근 활동순 상담 목록 }
+        "200": { description: 각 상담에 lastActivityAt과 최소 담당자 정보(id, name)를 포함하며 인증·토큰 내부값은 제외한 최근 활동순 목록 }
   /agent/chat-sessions/{sessionId}/accept:
     post:
       deprecated: true

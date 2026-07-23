@@ -26,3 +26,5 @@ export function createSession(accessToken: string, language: string) { return re
 export function getSession(sessionId: string, guestToken: string) { return request<GuestSession>(`/chat-sessions/${sessionId}`, { headers: { "x-guest-token": guestToken } }); }
 /** 재연결 시 데이터베이스에 저장된 메시지 이력을 복구합니다. */
 export function getMessages(sessionId: string, guestToken: string) { return request<GuestMessage[]>(`/chat-sessions/${sessionId}/messages`, { headers: { "x-guest-token": guestToken } }); }
+/** 고객이 종료 버튼을 확인했을 때 서버 상태와 Agent 화면을 즉시 CLOSED로 전환합니다. */
+export function closeGuestSession(sessionId: string, guestToken: string) { return request<GuestSession>(`/chat-sessions/${sessionId}/guest-close`, { method: "POST", headers: { "x-guest-token": guestToken } }); }

@@ -1365,6 +1365,61 @@ function playNotificationSound(): void {
   }
 }
 
+/** 비밀번호 노출 여부를 아이콘 하나로 전달해 모든 비밀번호 입력칸에서 같은 의미를 사용합니다. */
+function PasswordVisibilityIcon({
+  hidden,
+}: {
+  hidden: boolean;
+}): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+      <circle cx="12" cy="12" r="2.7" />
+      {hidden && <path d="m4 4 16 16" />}
+    </svg>
+  );
+}
+
+/** 각 비밀번호 칸이 자기 표시 상태를 독립 관리해 다른 비밀번호가 함께 노출되지 않게 합니다. */
+function PasswordField({
+  label,
+  autoComplete,
+  value,
+  onChange,
+}: {
+  label: string;
+  autoComplete: string;
+  value: string;
+  onChange: (value: string) => void;
+}): React.JSX.Element {
+  const { t } = useI18n();
+  const [visible, setVisible] = useState(false);
+  return (
+    <label>
+      {label}
+      <span className="password-input-wrap">
+        <input
+          type={visible ? "text" : "password"}
+          autoComplete={autoComplete}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          required
+        />
+        <button
+          type="button"
+          className="password-visibility"
+          aria-label={t(visible ? "비밀번호 숨기기" : "비밀번호 보기")}
+          title={t(visible ? "비밀번호 숨기기" : "비밀번호 보기")}
+          aria-pressed={visible}
+          onClick={() => setVisible((current) => !current)}
+        >
+          <PasswordVisibilityIcon hidden={visible} />
+        </button>
+      </span>
+    </label>
+  );
+}
+
 /** 현재 비밀번호를 다시 확인한 뒤 새 비밀번호로 바꾸고, 성공하면 폐기된 토큰을 남기지 않도록 재로그인시킵니다. */
 function PasswordChangeModal({ auth, onClose }: { auth: AgentAuth; onClose: () => void }): React.JSX.Element {
   const { t } = useI18n();
@@ -1388,7 +1443,67 @@ function PasswordChangeModal({ auth, onClose }: { auth: AgentAuth; onClose: () =
     } finally { setLoading(false); }
   }
 
-  return <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !loading) onClose(); }}><section className="confirm-modal password-modal" role="dialog" aria-modal="true" aria-labelledby="password-title"><h2 id="password-title">{t("비밀번호 변경")}</h2><p>{t("변경하면 이 계정으로 로그인한 모든 기기에서 다시 로그인해야 합니다.")}</p><form className="password-form" onSubmit={submit}><label>{t("현재 비밀번호")}<input type="password" autoComplete="current-password" value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} required /></label><label>{t("새 비밀번호")}<input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} required /></label><label>{t("새 비밀번호 확인")}<input type="password" autoComplete="new-password" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} required /></label>{error && <div className="error-box" role="alert">{error}</div>}<div><button type="button" className="secondary" disabled={loading} onClick={onClose}>{t("취소")}</button><button disabled={loading}>{t(loading ? "변경 중…" : "비밀번호 변경")}</button></div></form></section></div>;
+  return (
+    <div
+      className="modal-backdrop"
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !loading) onClose();
+      }}
+    >
+      <section
+        className="confirm-modal password-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="password-title"
+      >
+        <h2 id="password-title">{t("비밀번호 변경")}</h2>
+        <p>
+          {t(
+            "변경하면 이 계정으로 로그인한 모든 기기에서 다시 로그인해야 합니다.",
+          )}
+        </p>
+        <form className="password-form" onSubmit={submit}>
+          <PasswordField
+            label={t("현재 비밀번호")}
+            autoComplete="current-password"
+            value={currentPassword}
+            onChange={setCurrentPassword}
+          />
+          <PasswordField
+            label={t("새 비밀번호")}
+            autoComplete="new-password"
+            value={newPassword}
+            onChange={setNewPassword}
+          />
+          <PasswordField
+            label={t("새 비밀번호 확인")}
+            autoComplete="new-password"
+            value={confirmation}
+            onChange={setConfirmation}
+          />
+          {error && (
+            <div className="error-box" role="alert">
+              {error}
+            </div>
+          )}
+          <div>
+            <button
+              type="button"
+              className="secondary"
+              disabled={loading}
+              onClick={onClose}
+            >
+              {t("취소")}
+            </button>
+            <button disabled={loading}>
+              {t(loading ? "변경 중…" : "비밀번호 변경")}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
 }
 
 /** 관리자만 받은 투숙객 주소를 클립보드에 복사합니다. 실패하면 호출부가 화면 오류로 안내합니다. */

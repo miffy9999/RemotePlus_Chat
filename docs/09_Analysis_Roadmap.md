@@ -65,7 +65,8 @@ Phase 1 코드 읽기 순서:
 2. `modules/auth/auth.controller.ts`와 `auth.service.ts`에서 Agent JWT 발급 흐름을 읽는다.
 3. `modules/chat-sessions/chat-sessions.controller.ts`에서 역할별 API 경계를 확인한다.
 4. `chat-sessions.service.ts`에서 중복 상담 방지, 수락 경쟁 처리와 종료 권한을 확인한다.
-5. `session-policy.ts`와 테스트에서 허용·거부 상태를 함께 확인한다.
+5. `session-view.ts`에서 REST·WebSocket 공개 응답이 인증 내부 필드를 제거하는 경계를 확인한다.
+6. `session-policy.ts`와 테스트에서 허용·거부 상태를 함께 확인한다.
 
 ## 5단계 — WebSocket 메시지 흐름 따라가기
 
@@ -92,14 +93,15 @@ Phase 2 코드 읽기 순서:
 5. Gateway로 돌아와 저장 후 승인·상대방 전파 순서를 확인한다.
 6. `tests/integration/verify-phase2.ts`에서 두 방 격리와 재연결 흐름을 따라간다.
 
-## 6단계 — 15분 만료와 보안 이해
+## 6단계 — 수락 시점 기준 15분 만료와 보안 이해
 
 읽을 코드:
 
-1. 세션 만료 작업
-2. 메시지 전송 전 `expiresAt` 검사
-3. 인증·권한 미들웨어
-4. 요청 횟수 제한과 입력 검증
+1. WAITING의 null 만료 시각과 수락 트랜잭션의 `startedAt + 15분` 설정
+2. ACTIVE 전용 세션 만료 작업
+3. 메시지 전송 전 `expiresAt` 검사
+4. 인증·권한 미들웨어
+5. 요청 횟수 제한과 입력 검증
 
 중요 원칙:
 

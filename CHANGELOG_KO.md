@@ -1,5 +1,36 @@
 # 프로젝트 변경 이력
 
+## 2026-07-23 14:52:14 +09:00
+
+### 수정한 파일
+
+- 로그인 설정: `apps/agent-web/src/login-preferences.ts`, `login-preferences.test.ts`
+- Agent 화면: `apps/agent-web/src/main.tsx`, `i18n.tsx`, `styles.css`, `conversation-logs.test.ts`
+- 상담·메시지·실시간 서버: `chat-sessions.controller.ts`, `chat-sessions.service.ts`, `messages.service.ts`, `chat.gateway.ts`
+- 서버 테스트: `chat-session-list.spec.ts`, `chat-session-lifecycle.spec.ts`
+- 원격 `main`에서 병합된 보안·알림·배포·마이그레이션 파일과 관련 문서
+
+### 수정 내용
+
+- 원격 `origin/main`을 현재 기능 브랜치에 병합하고 파일 충돌을 해소했다.
+- 직원 로그인 화면의 `아이디 저장`과 `로그인 정보 저장`은 원격 `main` 구현을 기준으로 유지했다.
+- 나머지 통합 로그인, 관리자 대시보드, LINE형 Agent 화면, Guest 다국어·대기 중 선메시지 흐름은 현재 브랜치 구현을 유지했다.
+- 실시간 연결 시 직원 공용 방과 상담 수신함 방을 모두 구독하도록 중복 연결 코드를 하나로 합쳤다.
+- 상담 목록 범위(`OPEN`, `COMPLETED`) 최적화와 Agent별 열람 권한, 외부 응답의 민감정보 제거를 함께 적용했다.
+- 원격 `main`의 Guest 상담 종료 서버 API, 요청 빈도 제한, 브라우저 알림, 비밀번호 표시 전환, DB 보정 마이그레이션과 Agent 수락 시점 타이머 마이그레이션을 보존했다.
+- 현재 LINE형 Log 화면 구조에 맞도록 회귀 테스트를 수정하고, 비밀번호 표시 전환과 Guest 종료 API 수명주기 테스트를 함께 통과시켰다.
+
+### 수정 이유
+
+GitHub 병합 전에 발생한 충돌을 해결하면서 어느 한쪽을 통째로 선택해 기존 UI·상담 정책 또는 원격 `main`의 보안·운영 보완 기능이 사라지는 회귀를 막기 위해서다.
+
+### 확인 방법
+
+- `pnpm lint`: 전체 성공.
+- `pnpm test`: 서버 53개, Agent 50개, Guest 14개 전부 성공.
+- `pnpm build`: 공유 패키지·서버·Agent 웹·Guest 웹 전체 운영 빌드 성공.
+- 충돌 표식과 미해결 파일이 없고, Git 공백 검사도 통과하는지 최종 확인했다.
+
 ## 2026-07-23 14:23:52 +09:00
 
 ### 수정한 파일

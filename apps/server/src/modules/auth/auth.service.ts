@@ -15,6 +15,7 @@ export class AuthService {
    * 존재하지 않는 계정과 틀린 비밀번호에 같은 오류를 반환해 계정 추측을 어렵게 합니다.
    */
   async login(loginId: string, password: string, requiredRole?: "ADMIN" | "AGENT") {
+    // 무료 기본 계정의 초기 해시는 시작 시드가 아니라 Prisma 일회성 마이그레이션이 소유하므로 재배포가 사용자 변경 비밀번호를 반복 덮어쓰지 않습니다.
     const agent = await this.prisma.agent.findUnique({ where: { loginId } });
     if (!agent || agent.status !== "ACTIVE" || (requiredRole !== undefined && agent.role !== requiredRole) || !(await compare(password, agent.passwordHash))) {
       this.logger.warn(JSON.stringify({ event: "login.failed", role: requiredRole ?? "STAFF", loginId: loginId.slice(0, 30) }));

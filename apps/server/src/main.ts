@@ -7,14 +7,19 @@ import { AppModule } from "./app.module";
 import type { NextFunction, Request, Response } from "express";
 import { allowedWebOrigins, serverPort, validateRuntimeEnvironment } from "./common/config/environment";
 import { FixedWindowRateLimiter } from "./common/security/fixed-window-rate-limiter";
+import { restRateLimitPolicy } from "./common/security/rest-rate-limit-policy";
 
 /** 단일 서버 MVP용 메모리 요청 제한기다. 운영 다중 서버에서는 Redis 저장소로 교체해야 한다. */
 const restRateLimiter = new FixedWindowRateLimiter();
 
 function rateLimit(request: Request, response: Response, next: NextFunction): void {
-  const sensitive = /\/(login|verify|chat-sessions)/.test(request.path);
-  const limit = sensitive ? 30 : 120;
-  const key = `${request.ip}:${request.method}:${request.path}`;
+  const { key, limit } = restRateLimitPolicy({
+    // 프록시·테스트 환경에서 Express가 IP를 확정하지 못해도 모든 익명 요청이 임의 키로 분산되지 않게 안정된 대체값을 사용합니다.
+    ip: request.ip ?? request.socket.remoteAddress ?? "unknown",
+    method: request.method,
+    path: request.path,
+    authorization: request.header("authorization"),
+  });
   if (!restRateLimiter.allow(key, limit)) { response.status(429).json({ statusCode: 429, message: "요청이 너무 많습니다. 잠시 후 다시 시도하세요." }); return; }
   next();
 }

@@ -5,6 +5,8 @@ import type { GuestAccessPayload, StaffTokenPayload } from "../auth/auth.types";
 import { assertCanOpen, assertCanClose, canStaffReadSession, isSessionExpired } from "./session-policy";
 import { Prisma, type ChatSessionStatus } from "@prisma/client";
 import { EventEmitter2 } from "@nestjs/event-emitter";
+import type { SessionListScope } from "./dto/list-sessions.dto";
+import { PUBLIC_AGENT_SELECT, toPublicSession } from "./session-view";
 
 const SESSION_DURATION_MS = 15 * 60 * 1000;
 const CHAT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -87,29 +89,55 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Agent 목록은 별도 메시지 집계 없이 인덱스가 있는 최근 활동 시각으로 정렬해 무료 DB 부하를 제한합니다. */
-  async list(status: ChatSessionStatus | undefined, requester: StaffTokenPayload) {
+  async list(
+    status: ChatSessionStatus | undefined,
+    requester: StaffTokenPayload,
+    scope?: SessionListScope,
+  ) {
     await this.expireDueSessions();
     // Agent에게는 전체 WAITING, 본인 ACTIVE, 전체 종료 Log만 반환해 다른 Agent의 진행 상담을 목록 단계부터 차단합니다.
-    const visibility: Prisma.ChatSessionWhereInput = requester.role === "ADMIN" ? {} : {
-      OR: [
-        { status: "WAITING" },
-        { status: "ACTIVE", agentId: requester.sub },
-        { status: { in: ["CLOSED", "EXPIRED", "CANCELLED", "BLOCKED"] } },
-      ],
-    };
-    const where: Prisma.ChatSessionWhereInput = status ? { AND: [visibility, { status }] } : visibility;
+    const filters: Prisma.ChatSessionWhereInput[] = [];
+    if (requester.role !== "ADMIN") {
+      filters.push({
+        OR: [
+          { status: "WAITING" },
+          { status: "ACTIVE", agentId: requester.sub },
+          { status: { in: ["CLOSED", "EXPIRED", "CANCELLED", "BLOCKED"] } },
+        ],
+      });
+    }
+    // main의 OPEN/COMPLETED 최적화는 유지하되 직원별 가시성 조건보다 우선하지 않게 AND로 결합합니다.
+    if (status) {
+      filters.push({ status });
+    } else if (scope === "OPEN") {
+      filters.push({ status: { in: ["WAITING", "ACTIVE"] } });
+    } else if (scope === "COMPLETED") {
+      filters.push({
+        status: { in: ["CLOSED", "EXPIRED", "CANCELLED", "BLOCKED"] },
+      });
+    }
+    const where: Prisma.ChatSessionWhereInput =
+      filters.length === 0
+        ? {}
+        : filters.length === 1
+          ? filters[0]
+          : { AND: filters };
     const sessions = await this.prisma.chatSession.findMany({
       where,
       include: {
         room: { include: { hotel: true } },
-        agent: true,
+        // 비밀번호 해시와 토큰 버전은 DB 조회 단계부터 응답 후보에서 제외합니다.
+        agent: { select: PUBLIC_AGENT_SELECT },
         messages: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1 },
       },
       orderBy: [{ lastActivityAt: "desc" }, { createdAt: "desc" }],
     });
     return sessions.map((session) => {
       const { messages, ...withoutMessages } = session;
-      return { ...this.toPublic(withoutMessages), lastMessage: messages[0] ?? null };
+      return {
+        ...toPublicSession(withoutMessages),
+        lastMessage: messages[0] ?? null,
+      };
     });
   }
 
@@ -141,6 +169,41 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     const session = await this.prisma.chatSession.update({ where: { id }, data: { status: "CLOSED", closedAt: new Date(), closeReason: "AGENT_CLOSED" }, include: { room: { include: { hotel: true } }, agent: true } });
     const safe = this.toPublic(session);
     this.logger.log(JSON.stringify({ event: "session.closed", sessionId: id, actorId: requester.sub, reason: "AGENT_CLOSED" }));
+    this.events.emit("chat.session.closed", safe);
+    return safe;
+  }
+
+  /** 고객 토큰을 재검증한 뒤 WAITING 또는 ACTIVE 상담을 고객 요청으로 즉시 종료합니다. */
+  async closeByGuest(id: string, guestToken?: string) {
+    const current = await this.findOrThrow(id);
+    if (!guestToken || sha256(guestToken) !== current.guestTokenHash) {
+      throw new UnauthorizedException("투숙객 채팅 인증 정보가 올바르지 않습니다.");
+    }
+    if (!["WAITING", "ACTIVE"].includes(current.status)) {
+      throw new ConflictException("이미 종료되었거나 만료된 상담입니다.");
+    }
+    // Agent 종료·자동 만료와 동시에 요청되어도 마지막 요청이 종료 사유를 덮어쓰지 않게 상태 조건을 함께 갱신합니다.
+    const result = await this.prisma.chatSession.updateMany({
+      where: { id, status: { in: ["WAITING", "ACTIVE"] } },
+      data: {
+        status: "CLOSED",
+        closedAt: new Date(),
+        closeReason: "GUEST_CLOSED",
+      },
+    });
+    if (result.count !== 1) {
+      throw new ConflictException("이미 종료되었거나 만료된 상담입니다.");
+    }
+    const session = await this.findOrThrow(id);
+    const safe = this.toPublic(session);
+    this.logger.log(
+      JSON.stringify({
+        event: "session.closed",
+        sessionId: id,
+        actor: "GUEST",
+        reason: "GUEST_CLOSED",
+      }),
+    );
     this.events.emit("chat.session.closed", safe);
     return safe;
   }
@@ -216,7 +279,6 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
 
   /** DB 객체에서 접근 토큰 해시를 제거하고 화면에 필요한 정보만 반환합니다. */
   private toPublic(session: any) {
-    const { guestTokenHash: _secret, ...safe } = session;
-    return safe;
+    return toPublicSession(session);
   }
 }

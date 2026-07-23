@@ -1,3 +1,4 @@
+import { ConflictException } from "@nestjs/common";
 import { MessagesService } from "../src/modules/messages/messages.service";
 
 describe("최근 채팅 활동 시각", () => {
@@ -28,5 +29,39 @@ describe("최근 채팅 활동 시각", () => {
     expect(result).toEqual({ message, duplicate: false });
     expect(transaction.chatSession.update).toHaveBeenCalledWith({ where: { id: sessionId }, data: { lastActivityAt: createdAt } });
     expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  /** 메시지 요청이 만료를 처음 발견해도 고객 화면에 필요한 관계는 유지하고 인증 내부값은 이벤트에서 제거합니다. */
+  it("만료 이벤트를 완전한 공개 상담 형식으로 전송한다", async () => {
+    const sessionId = "11111111-1111-4111-8111-111111111111";
+    const expired = {
+      id: sessionId,
+      status: "EXPIRED",
+      expiresAt: new Date(0),
+      guestTokenHash: "guest-secret",
+      room: { roomNumber: "101", hotel: { id: "hotel-id", name: "호텔" } },
+      agent: { id: "agent-id", name: "상담원", passwordHash: "bcrypt-secret", tokenVersion: 3 },
+    };
+    const emit = jest.fn();
+    const prisma = {
+      chatSession: {
+        findUnique: jest.fn().mockResolvedValue({ id: sessionId, status: "ACTIVE", agentId: "agent-id", expiresAt: new Date(0) }),
+        update: jest.fn().mockResolvedValue(expired),
+      },
+    };
+    const service = new MessagesService(prisma as never, { emit } as never);
+
+    await expect(service.save(
+      { kind: "guest", sessionId },
+      { sessionId, clientMessageId: "33333333-3333-4333-8333-333333333333", content: "늦은 메시지" },
+    )).rejects.toBeInstanceOf(ConflictException);
+
+    expect(emit).toHaveBeenCalledWith("chat.session.closed", expect.objectContaining({
+      id: sessionId,
+      room: expired.room,
+      agent: { id: "agent-id", name: "상담원" },
+    }));
+    expect(JSON.stringify(emit.mock.calls[0][1])).not.toContain("secret");
+    expect(JSON.stringify(emit.mock.calls[0][1])).not.toContain("tokenVersion");
   });
 });

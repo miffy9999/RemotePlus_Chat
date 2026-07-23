@@ -4,6 +4,10 @@ import { Prisma, type Message } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
 import type { RealtimeIdentity } from "../realtime/realtime.types";
 import { assertSessionWritable, validateMessageInput } from "./message-policy";
+import {
+  PUBLIC_AGENT_SELECT,
+  toPublicSession,
+} from "../chat-sessions/session-view";
 
 /** 메시지 권한 검사, 멱등 저장과 순서 보존을 담당하는 단일 서비스입니다. */
 @Injectable()
@@ -19,11 +23,30 @@ export class MessagesService {
     const session = await this.prisma.chatSession.findUnique({ where: { id: input.sessionId } });
     if (!session) throw new UnauthorizedException("상담 세션을 찾을 수 없습니다.");
 
-    if (session.status === "ACTIVE" && session.expiresAt && session.expiresAt.getTime() <= Date.now()) {
-      const expired = await this.prisma.chatSession.update({ where: { id: session.id }, data: { status: "EXPIRED", closedAt: new Date(), closeReason: "TIME_LIMIT" } });
-      this.events.emit("chat.session.closed", expired);
+    const isExpired =
+      session.status === "ACTIVE" &&
+      session.expiresAt !== null &&
+      session.expiresAt.getTime() <= Date.now();
+    if (isExpired) {
+      const expiredSession = await this.prisma.chatSession.update({
+        where: { id: session.id },
+        data: {
+          status: "EXPIRED",
+          closedAt: new Date(),
+          closeReason: "TIME_LIMIT",
+        },
+        include: {
+          room: { include: { hotel: true } },
+          agent: { select: PUBLIC_AGENT_SELECT },
+        },
+      });
+      // 만료를 촉발한 마지막 메시지 요청에서도 전체 화면 형식을 유지하고 인증 내부값이 Socket.IO로 새지 않게 합니다.
+      this.events.emit(
+        "chat.session.closed",
+        toPublicSession(expiredSession),
+      );
     }
-    const effectiveStatus = session.status === "ACTIVE" && session.expiresAt && session.expiresAt.getTime() <= Date.now() ? "EXPIRED" : session.status;
+    const effectiveStatus = isExpired ? "EXPIRED" : session.status;
     assertSessionWritable(effectiveStatus, session.expiresAt, identity.kind);
     this.assertSender(identity, session.id, session.agentId);
 
