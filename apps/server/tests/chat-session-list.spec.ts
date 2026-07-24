@@ -50,4 +50,19 @@ describe("상담 목록 범위", () => {
     expect(query.where).toEqual({ status: { in: ["CLOSED", "EXPIRED", "CANCELLED", "BLOCKED"] } });
     expect(query.include.agent).toEqual({ select: { id: true, name: true } });
   });
+
+  /** 관리자 Agent 조회 화면은 담당자와 무관하게 모든 WAITING·ACTIVE 상담을 볼 수 있어야 합니다. */
+  it("ADMIN OPEN 범위에서는 Agent별 가시성 필터를 추가하지 않는다", async () => {
+    const findMany = jest.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+    const service = new ChatSessionsService(
+      { chatSession: { findMany } } as never,
+      { emit: jest.fn() } as never,
+    );
+
+    await service.list(undefined, admin, "OPEN");
+
+    expect(findMany.mock.calls[1][0].where).toEqual({
+      status: { in: ["WAITING", "ACTIVE"] },
+    });
+  });
 });

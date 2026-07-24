@@ -26,6 +26,22 @@ const ja: Record<string, string> = {
   "한국어": "한국어", "일본어": "日本語", "UI 언어": "表示言語"
 };
 
+// 관리자 전용 Agent 조회 화면의 이동·읽기 전용 안내도 일본어 UI에서 같은 의미로 표시합니다.
+Object.assign(ja, {
+  "Agent 페이지": "Agentページ",
+  "담당 상담원": "担当相談員",
+  "담당자 없음": "担当者なし",
+  "미배정": "未割り当て",
+  "전체 호텔": "全ホテル",
+  "채팅 만료 시간": "チャット有効期限",
+  "관리자 조회": "管理者閲覧",
+  "관리자는 전체 상담을 읽기 전용으로 조회할 수 있습니다.":
+    "管理者はすべての相談を読み取り専用で閲覧できます。",
+  "관리자 조회 모드입니다. 모든 상담을 읽을 수 있지만 메시지를 보내거나 담당자로 배정될 수 없습니다.":
+    "管理者閲覧モードです。すべての相談を閲覧できますが、メッセージ送信や担当者への割り当てはできません。",
+  "관리자 읽기 전용 조회입니다": "管理者の読み取り専用閲覧です",
+});
+
 interface LanguageContextValue { language: UiLanguage; setLanguage: (language: UiLanguage) => void; t: (text: string) => string; locale: string; }
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
