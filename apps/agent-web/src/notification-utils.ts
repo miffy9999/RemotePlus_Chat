@@ -9,20 +9,6 @@ interface ActivitySession {
   lastActivityAt?: string;
 }
 
-const NOTIFICATION_SOUND_KEY = "remoteplus-agent-notification-sound";
-
-/** 저장값이 명시적으로 true일 때만 알림음을 켜 기본 동작은 조용한 화면 팝업으로 유지합니다. */
-export function readNotificationSoundEnabled(storage: Storage = localStorage): boolean {
-  try { return storage.getItem(NOTIFICATION_SOUND_KEY) === "true"; }
-  catch { return false; }
-}
-
-/** 알림음 선택은 인증정보가 아닌 UI 환경설정이므로 같은 브라우저에서 유지되도록 localStorage에 저장합니다. */
-export function saveNotificationSoundEnabled(enabled: boolean, storage: Storage = localStorage): void {
-  try { storage.setItem(NOTIFICATION_SOUND_KEY, String(enabled)); }
-  catch { /* 저장소가 차단되어도 현재 탭의 상태와 팝업 동작은 유지합니다. */ }
-}
-
 /** 최근 메시지 시각이 큰 상담부터 복사 정렬해 React 원본 상태를 변경하지 않고 메신저형 목록을 만듭니다. */
 export function sortSessionsByRecentActivity<T extends ActivitySession>(sessions: readonly T[]): T[] {
   // 무료 플랜의 순차 배포 중 구버전 API가 lastActivityAt을 아직 주지 않는 짧은 구간에는 생성 시각으로 안전하게 대체합니다.

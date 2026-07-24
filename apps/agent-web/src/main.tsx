@@ -51,11 +51,10 @@ import {
 import {
   findNewWaitingSessions,
   notificationPreview,
-  readNotificationSoundEnabled,
-  saveNotificationSoundEnabled,
   sortSessionsByRecentActivity,
   waitingSessionIds,
 } from "./notification-utils";
+import { shouldNotifyAgent } from "./agent-notification-policy";
 import { createTitleFlasher, type TitleFlasher } from "./title-flasher";
 import {
   ADMIN_AGENT_WORKSPACE_PATH,
@@ -417,7 +416,7 @@ interface AgentNotice {
   actionLabel?: string;
 }
 
-/** 화면을 보고 있지 않아도 새 상담을 알아볼 수 있도록 권한이 허용된 경우에만 운영체제 알림을 띄웁니다. */
+/** 화면을 보고 있지 않아도 새 상담을 알아볼 수 있도록 권한이 허용된 경우에만 무음 운영체제 알림을 띄웁니다. */
 function showSystemNotification(
   title: string,
   body: string,
@@ -430,7 +429,8 @@ function showSystemNotification(
   )
     return;
   try {
-    const notification = new Notification(title, { body, tag });
+    // 운영체제와 브라우저가 자체 알림음을 내지 않도록 시스템 알림에도 무음 옵션을 명시합니다.
+    const notification = new Notification(title, { body, tag, silent: true });
     notification.onclick = () => {
       window.focus();
       notification.close();
@@ -524,14 +524,20 @@ function LineConversationPanel({
     void getMessages(auth.accessToken, session.id)
       .then((history) => { if (active) setMessages(history); })
       .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : t("상담 기록을 불러오지 못했습니다.")); });
-    if (readOnly) {
+    // 일반 종료 기록은 정적 조회만 하지만, ADMIN이 WAITING/ACTIVE 상담을 읽는 경우에는
+    // 메시지를 전송할 권한 없이도 상담방을 구독해야 현재 대화를 새로고침 없이 볼 수 있습니다.
+    const shouldJoinRealtime =
+      !readOnly ||
+      (adminReadOnly &&
+        (session.status === "WAITING" || session.status === "ACTIVE"));
+    if (!shouldJoinRealtime) {
       setConnection(adminReadOnly ? "관리자 조회" : "기록 보기");
       return () => { active = false; };
     }
     const socket = io(SOCKET_URL, { auth: { staffToken: auth.accessToken }, transports: ["websocket"] });
     socketRef.current = socket;
     socket.on("connect", async () => {
-      setConnection("연결됨");
+      setConnection(adminReadOnly ? "관리자 조회" : "연결됨");
       const joined = await socket.emitWithAck("chat:join", { sessionId: session.id });
       if (!joined?.ok) setError(joined?.error?.message ?? t("상담방 입장에 실패했습니다."));
     });
@@ -550,7 +556,7 @@ function LineConversationPanel({
     });
     socket.on("chat:error", (payload: { message: string }) => setError(payload.message));
     return () => { active = false; socket.disconnect(); socketRef.current = null; };
-  }, [adminReadOnly, auth.accessToken, readOnly, session.id, t]);
+  }, [adminReadOnly, auth.accessToken, readOnly, session.id, session.status, t]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   useEffect(() => { messageEndRef.current?.scrollIntoView({ behavior: messages.length > 1 ? "smooth" : "auto" }); }, [messages.length]);
 
@@ -641,9 +647,6 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const [languageFilter, setLanguageFilter] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<AgentNotice | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(() =>
-    readNotificationSoundEnabled(),
-  );
   const [notificationPermission, setNotificationPermission] = useState<
     NotificationPermission | "unsupported"
   >(() =>
@@ -658,7 +661,6 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const knownWaitingIds = useRef<Set<string> | null>(null);
   const activeSessionsRef = useRef<Map<string, SessionView>>(new Map());
   const notificationSocketRef = useRef<Socket | null>(null);
-  const soundEnabledRef = useRef(soundEnabled);
   const titleFlasherRef = useRef<TitleFlasher | null>(null);
   const refreshInProgress = useRef(false);
   const sidebarResizeRef = useRef<{
@@ -706,8 +708,9 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   }, []);
 
   function announce(nextNotice: AgentNotice): void {
+    // 상담 화면을 직접 보고 있는 동안에는 화면 팝업·제목 점멸·시스템 알림을 만들지 않습니다.
+    if (!shouldNotifyAgent(document)) return;
     setNotice(nextNotice);
-    if (soundEnabledRef.current) playNotificationSound();
     titleFlasherRef.current?.start(nextNotice.title);
     showSystemNotification(nextNotice.title, nextNotice.body, nextNotice.id);
   }
@@ -869,13 +872,6 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       });
     }
   }
-  function toggleNotificationSound(): void {
-    const enabled = !soundEnabledRef.current;
-    soundEnabledRef.current = enabled;
-    setSoundEnabled(enabled);
-    saveNotificationSoundEnabled(enabled);
-    if (enabled) playNotificationSound();
-  }
   function showWaitingList(): void {
     setNotice(null);
     setMode("current");
@@ -985,10 +981,6 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           </div>
           <LanguageSwitcher/>
           <div className="line-agent-controls">
-            <button className="link-button" aria-pressed={soundEnabled} onClick={toggleNotificationSound}>
-              <span className="line-agent-control-icon" aria-hidden="true">{soundEnabled ? "🔇" : "🔊"}</span>
-              <span className="line-agent-control-label">{t(soundEnabled ? "알림음 끄기" : "알림음 켜기")}</span>
-            </button>
             <button className="link-button" disabled={notificationPermission !== "default"} onClick={() => void enableBrowserNotifications()}>
               <span className="line-agent-control-icon" aria-hidden="true">♢</span>
               <span className="line-agent-control-label">{notificationButtonLabel}</span>
@@ -1064,9 +1056,6 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const [selected, setSelected] = useState<SessionView | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState<AgentNotice | null>(null);
-  const [soundEnabled, setSoundEnabled] = useState(() =>
-    readNotificationSoundEnabled(),
-  );
   const [notificationPermission, setNotificationPermission] = useState<
     NotificationPermission | "unsupported"
   >(() =>
@@ -1077,7 +1066,6 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const knownWaitingIds = useRef<Set<string> | null>(null);
   const activeSessionsRef = useRef<Map<string, SessionView>>(new Map());
   const notificationSocketRef = useRef<Socket | null>(null);
-  const soundEnabledRef = useRef(soundEnabled);
   const titleFlasherRef = useRef<TitleFlasher | null>(null);
   const refreshInProgress = useRef(false);
   const listScrollPosition = useRef(0);
@@ -1105,8 +1093,8 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   }, []);
 
   function announce(nextNotice: AgentNotice): void {
+    if (!shouldNotifyAgent(document)) return;
     setNotice(nextNotice);
-    if (soundEnabledRef.current) playNotificationSound();
     titleFlasherRef.current?.start(nextNotice.title);
     showSystemNotification(nextNotice.title, nextNotice.body, nextNotice.id);
   }
@@ -1251,16 +1239,6 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     }
   }
 
-  /** 알림음은 기본으로 끄고, 상담원이 직접 켠 경우에만 이후 상담·메시지 알림에서 재생합니다. */
-  function toggleNotificationSound(): void {
-    const enabled = !soundEnabledRef.current;
-    soundEnabledRef.current = enabled;
-    setSoundEnabled(enabled);
-    saveNotificationSoundEnabled(enabled);
-    // 켜기 버튼을 누른 사용자 동작 안에서 시험음을 재생해 브라우저 자동재생 정책을 만족하고 설정 결과를 확인시킵니다.
-    if (enabled) playNotificationSound();
-  }
-
   if (selected)
     return (
       <>
@@ -1332,14 +1310,6 @@ function AgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
               <p>{t("오래 기다린 상담부터 확인하세요.")}</p>
             </div>
             <div className="section-actions">
-              <button
-                type="button"
-                className="secondary"
-                aria-pressed={soundEnabled}
-                onClick={toggleNotificationSound}
-              >
-                {t(soundEnabled ? "알림음 끄기" : "알림음 켜기")}
-              </button>
               {notificationPermission !== "unsupported" && (
                 <button
                   type="button"
@@ -1591,21 +1561,6 @@ function ConversationLogModal({
       </section>
     </div>
   );
-}
-
-/** 사용자가 알림음을 켠 경우에만 짧은 시험·수신음을 재생하고 완료 뒤 오디오 자원을 해제합니다. */
-function playNotificationSound(): void {
-  try {
-    const context = new AudioContext();
-    const oscillator = context.createOscillator();
-    oscillator.connect(context.destination);
-    oscillator.frequency.value = 880;
-    oscillator.onended = () => void context.close();
-    oscillator.start();
-    oscillator.stop(context.currentTime + 0.12);
-  } catch {
-    /* 소리가 차단되어도 화면 팝업은 항상 유지됩니다. */
-  }
 }
 
 /** 비밀번호 노출 여부를 아이콘 하나로 전달해 모든 비밀번호 입력칸에서 같은 의미를 사용합니다. */
