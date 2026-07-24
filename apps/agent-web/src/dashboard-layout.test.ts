@@ -136,7 +136,8 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
     expect(mainSource).not.toContain('setActiveAdminSection("logs")');
     expect(mainSource).not.toContain('activeAdminSection === "logs"');
     expect(mainSource).toContain('t("Log")');
-    expect(mainSource).toContain("const logSessions = useMemo");
+    expect(mainSource).toContain("listSessionLogs(auth.accessToken");
+    expect(mainSource).toContain('listSessions(auth.accessToken, "OPEN")');
     expect(mainSource).toContain("remoteplus-admin-menu-collapsed");
     expect(styles).toContain(
       ".admin-dashboard { display: grid; grid-template-columns: 250px minmax(0,1fr);",

@@ -5,11 +5,28 @@ import type { GuestAccessPayload, StaffTokenPayload } from "../auth/auth.types";
 import { assertCanOpen, assertCanClose, canStaffReadSession, isSessionExpired } from "./session-policy";
 import { Prisma, type ChatSessionStatus } from "@prisma/client";
 import { EventEmitter2 } from "@nestjs/event-emitter";
-import type { SessionListScope } from "./dto/list-sessions.dto";
+import {
+  SESSION_LOG_PAGE_SIZE,
+  type SessionListScope,
+} from "./dto/list-sessions.dto";
 import { PUBLIC_AGENT_SELECT, toPublicSession } from "./session-view";
 
 const CHAT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const TERMINAL_SESSION_STATUSES: ChatSessionStatus[] = [
+  "CLOSED",
+  "EXPIRED",
+  "CANCELLED",
+  "BLOCKED",
+];
+
+interface SessionListOptions {
+  page?: number;
+  pageSize?: number;
+  hotelId?: string;
+  language?: string;
+  search?: string;
+}
 
 /** 상담 생성부터 조회·수락·종료까지 상태 전환을 트랜잭션 단위로 관리합니다. */
 @Injectable()
@@ -92,6 +109,7 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     status: ChatSessionStatus | undefined,
     requester: StaffTokenPayload,
     scope?: SessionListScope,
+    options: SessionListOptions = {},
   ) {
     await this.expireDueSessions();
     // Agent에게는 전체 WAITING, 본인 ACTIVE, 전체 종료 Log만 반환해 다른 Agent의 진행 상담을 목록 단계부터 차단합니다.
@@ -112,8 +130,48 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
       filters.push({ status: { in: ["WAITING", "ACTIVE"] } });
     } else if (scope === "COMPLETED") {
       filters.push({
-        status: { in: ["CLOSED", "EXPIRED", "CANCELLED", "BLOCKED"] },
+        status: { in: TERMINAL_SESSION_STATUSES },
       });
+    }
+    // 완료 Log의 필터를 DB where에 포함해 현재 100건 이후의 기록도 정확하게 검색합니다.
+    if (scope === "COMPLETED") {
+      if (options.hotelId) {
+        filters.push({ room: { hotelId: options.hotelId } });
+      }
+      if (options.language) {
+        filters.push({ language: options.language });
+      }
+      const search = options.search?.trim();
+      if (search) {
+        filters.push({
+          OR: [
+            {
+              room: {
+                hotel: {
+                  name: { contains: search, mode: "insensitive" },
+                },
+              },
+            },
+            {
+              room: {
+                roomNumber: { contains: search, mode: "insensitive" },
+              },
+            },
+            {
+              agent: {
+                name: { contains: search, mode: "insensitive" },
+              },
+            },
+            {
+              messages: {
+                some: {
+                  content: { contains: search, mode: "insensitive" },
+                },
+              },
+            },
+          ],
+        });
+      }
     }
     const where: Prisma.ChatSessionWhereInput =
       filters.length === 0
@@ -121,23 +179,87 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
         : filters.length === 1
           ? filters[0]
           : { AND: filters };
-    const sessions = await this.prisma.chatSession.findMany({
+    const page =
+      scope === "COMPLETED" && options.page
+        ? Math.max(1, options.page)
+        : undefined;
+    const pageSize =
+      page === undefined
+        ? undefined
+        : Math.min(
+            SESSION_LOG_PAGE_SIZE,
+            Math.max(1, options.pageSize ?? SESSION_LOG_PAGE_SIZE),
+          );
+    const query = {
       where,
       include: {
         room: { include: { hotel: true } },
         // 비밀번호 해시와 토큰 버전은 DB 조회 단계부터 응답 후보에서 제외합니다.
         agent: { select: PUBLIC_AGENT_SELECT },
-        messages: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 1 },
+        messages: {
+          orderBy: [
+            { createdAt: "desc" as const },
+            { id: "desc" as const },
+          ],
+          take: 1,
+        },
       },
-      orderBy: [{ lastActivityAt: "desc" }, { createdAt: "desc" }],
-    });
-    return sessions.map((session) => {
+      orderBy: [
+        { lastActivityAt: "desc" as const },
+        { createdAt: "desc" as const },
+        { id: "desc" as const },
+      ],
+      ...(page !== undefined && pageSize !== undefined
+        ? { skip: (page - 1) * pageSize, take: pageSize }
+        : {}),
+    } satisfies Prisma.ChatSessionFindManyArgs;
+    const sessions = await this.prisma.chatSession.findMany(query);
+    const items = sessions.map((session) => {
       const { messages, ...withoutMessages } = session;
       return {
         ...toPublicSession(withoutMessages),
         lastMessage: messages[0] ?? null,
       };
     });
+    if (page === undefined || pageSize === undefined) return items;
+
+    // 호텔·언어 선택지는 Log 전체 범위에서 가벼운 distinct/관계 쿼리로 구해 페이지가 바뀌어도 유지합니다.
+    const completedWhere: Prisma.ChatSessionWhereInput = {
+      status: { in: TERMINAL_SESSION_STATUSES },
+    };
+    const [total, hotels, languages] = await Promise.all([
+      this.prisma.chatSession.count({ where }),
+      this.prisma.hotel.findMany({
+        where: {
+          rooms: {
+            some: {
+              sessions: {
+                some: completedWhere,
+              },
+            },
+          },
+        },
+        select: { id: true, name: true },
+        orderBy: { name: "asc" },
+      }),
+      this.prisma.chatSession.findMany({
+        where: completedWhere,
+        distinct: ["language"],
+        select: { language: true },
+        orderBy: { language: "asc" },
+      }),
+    ]);
+    return {
+      items,
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      filters: {
+        hotels,
+        languages: languages.map((item) => item.language),
+      },
+    };
   }
 
   /**

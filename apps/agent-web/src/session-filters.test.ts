@@ -5,7 +5,12 @@ import { filterAgentSessions } from "./session-filters";
 
 const mainSource = readFileSync(new URL("./main.tsx", import.meta.url), "utf8");
 
-function session(id: string, language: string, hotel = "사쿠라 호텔"): SessionView {
+function session(
+  id: string,
+  language: string,
+  hotel = "사쿠라 호텔",
+  hotelId = `hotel-${id}`,
+): SessionView {
   return {
     id,
     status: "WAITING",
@@ -19,7 +24,7 @@ function session(id: string, language: string, hotel = "사쿠라 호텔"): Sess
     lastMessage: null,
     room: {
       roomNumber: "101",
-      hotel: { id: `hotel-${id}`, name: hotel },
+      hotel: { id: hotelId, name: hotel },
     },
   };
 }
@@ -58,8 +63,8 @@ describe("Agent 상담 목록 필터", () => {
 
   it("검색·호텔·언어 조건을 함께 적용한다", () => {
     const sessions = [
-      session("target", "ja", "타누키"),
-      session("other", "ja", "사쿠라 호텔"),
+      session("target", "ja", "타누키", "hotel-target"),
+      session("other", "ja", "사쿠라 호텔", "hotel-other"),
     ];
     sessions[0].lastMessage = {
       id: "message-1",
@@ -74,7 +79,7 @@ describe("Agent 상담 목록 필터", () => {
     expect(
       filterAgentSessions(sessions, {
         search: "수건",
-        hotel: "타누키",
+        hotel: "hotel-target",
         language: "ja",
       }).map((item) => item.id),
     ).toEqual(["target"]);

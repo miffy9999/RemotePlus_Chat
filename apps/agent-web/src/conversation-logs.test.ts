@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SessionView } from "./api";
-import { listSessions } from "./api";
+import { listSessionLogs, listSessions } from "./api";
 import { filterConversationLogs } from "./conversation-logs";
 
 const mainSource = readFileSync(new URL("./main.tsx", import.meta.url), "utf8");
@@ -34,6 +34,38 @@ describe("공동 상담 로그 필터", () => {
     expect(String(fetchMock.mock.calls[1][0])).toContain("scope=COMPLETED");
   });
 
+  it("Log 요청은 페이지 번호와 최대 100건 및 서버 필터를 전달한다", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          items: [],
+          total: 0,
+          page: 2,
+          pageSize: 100,
+          totalPages: 1,
+          filters: { hotels: [], languages: [] },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await listSessionLogs("token", {
+      page: 2,
+      search: "수건",
+      hotelId: "11111111-1111-4111-8111-111111111111",
+      language: "ja",
+    });
+
+    const url = String(fetchMock.mock.calls[0][0]);
+    expect(url).toContain("scope=COMPLETED");
+    expect(url).toContain("page=2");
+    expect(url).toContain("pageSize=100");
+    expect(url).toContain("search=");
+    expect(url).toContain("hotelId=11111111-1111-4111-8111-111111111111");
+    expect(url).toContain("language=ja");
+  });
+
   /** 새 Vercel이 먼저 뜬 짧은 구간에는 구버전 Render의 scope 거부를 전체 목록 필터로 대체해 상담 화면 중단을 막습니다. */
   it("구버전 서버가 scope를 거부하면 필요한 상태만 호환 조회한다", async () => {
     const sessions = [session("waiting", "WAITING", "hotel-a"), session("closed", "CLOSED", "hotel-a")];
@@ -48,12 +80,24 @@ describe("공동 상담 로그 필터", () => {
 
   /** LINE형 Agent Log는 현재 상담 목록과 분리되고 선택한 완료 상담을 읽기 전용 본문으로 엽니다. */
   it("Agent Log 상세를 읽기 전용 LINE 본문으로 연다", () => {
-    expect(mainSource).toContain('setMode("log")');
+    expect(mainSource).toContain('changeMode("log")');
     expect(mainSource).toContain(
       'readOnly={isAdminView || mode === "log" || TERMINAL_SESSION_STATUSES.includes(selected.status)}',
     );
     expect(mainSource).toContain("adminReadOnly={isAdminView}");
     expect(mainSource).toContain("종료된 상담 기록입니다");
+  });
+
+  it("OPEN 폴링과 100건 Log 페이지 요청을 분리하고 페이지 이동 UI를 제공한다", () => {
+    expect(mainSource).toContain(
+      'listSessions(auth.accessToken, "OPEN")',
+    );
+    expect(mainSource).toContain("listSessionLogs(auth.accessToken");
+    expect(mainSource).toContain('className="line-log-pagination"');
+    expect(mainSource).toContain("setLogPage((page) => Math.max(1, page - 1))");
+    expect(mainSource).toContain(
+      "setLogPage((page) => Math.min(logTotalPages, page + 1))",
+    );
   });
 
   /** 상담 종료는 현재 대화를 읽기 전용으로 바꿀 뿐 사용자가 선택하지 않은 Log 탭으로 이동시키지 않습니다. */

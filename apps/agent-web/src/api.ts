@@ -35,6 +35,26 @@ export interface MessageView {
 }
 
 export type SessionListScope = "OPEN" | "COMPLETED";
+export const SESSION_LOG_PAGE_SIZE = 100;
+
+export interface SessionLogPage {
+  items: SessionView[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  filters: {
+    hotels: Array<{ id: string; name: string }>;
+    languages: string[];
+  };
+}
+
+export interface SessionLogQuery {
+  page: number;
+  search?: string;
+  hotelId?: string;
+  language?: string;
+}
 
 /** HTTP 상태를 보존해 인증 실패와 순차 배포 중 아직 없는 엔드포인트를 안전하게 구분합니다. */
 class ApiError extends Error {
@@ -98,6 +118,88 @@ export async function listSessions(token: string, scope?: SessionListScope) {
     const sessions = await request<SessionView[]>("/agent/chat-sessions", init);
     const statuses = scope === "OPEN" ? ["WAITING", "ACTIVE"] : ["CLOSED", "EXPIRED", "CANCELLED", "BLOCKED"];
     return sessions.filter((session) => statuses.includes(session.status));
+  }
+}
+
+/** 완료 상담 Log는 서버 DB에서 100건씩 읽고 전체 건수와 필터 선택지를 함께 반환합니다. */
+export async function listSessionLogs(
+  token: string,
+  query: SessionLogQuery,
+): Promise<SessionLogPage> {
+  const parameters = new URLSearchParams({
+    scope: "COMPLETED",
+    page: String(query.page),
+    pageSize: String(SESSION_LOG_PAGE_SIZE),
+  });
+  if (query.search?.trim()) parameters.set("search", query.search.trim());
+  if (query.hotelId) parameters.set("hotelId", query.hotelId);
+  if (query.language) parameters.set("language", query.language);
+  const init: RequestInit = {
+    headers: { authorization: `Bearer ${token}` },
+  };
+  try {
+    const response = await request<SessionLogPage | SessionView[]>(
+      `/agent/chat-sessions?${parameters.toString()}`,
+      init,
+    );
+    // 순차 배포 중 구버전 서버가 query를 무시하고 배열을 반환하면 화면이 깨지지 않게 현재 페이지만 임시 구성합니다.
+    if (Array.isArray(response)) {
+      const start = (query.page - 1) * SESSION_LOG_PAGE_SIZE;
+      return {
+        items: response.slice(start, start + SESSION_LOG_PAGE_SIZE),
+        total: response.length,
+        page: query.page,
+        pageSize: SESSION_LOG_PAGE_SIZE,
+        totalPages: Math.max(
+          1,
+          Math.ceil(response.length / SESSION_LOG_PAGE_SIZE),
+        ),
+        filters: {
+          hotels: [
+            ...new Map(
+              response.map((session) => [
+                session.room.hotel.id,
+                session.room.hotel,
+              ]),
+            ).values(),
+          ].sort((left, right) => left.name.localeCompare(right.name)),
+          languages: [
+            ...new Set(response.map((session) => session.language)),
+          ].sort(),
+        },
+      };
+    }
+    return response;
+  } catch (reason) {
+    // page 관련 DTO가 아직 없는 구버전 서버에서는 기존 COMPLETED 응답을 한 번만 받아 호환 페이지를 만듭니다.
+    if (!(reason instanceof ApiError) || ![400, 404].includes(reason.status)) {
+      throw reason;
+    }
+    const sessions = await listSessions(token, "COMPLETED");
+    const start = (query.page - 1) * SESSION_LOG_PAGE_SIZE;
+    return {
+      items: sessions.slice(start, start + SESSION_LOG_PAGE_SIZE),
+      total: sessions.length,
+      page: query.page,
+      pageSize: SESSION_LOG_PAGE_SIZE,
+      totalPages: Math.max(
+        1,
+        Math.ceil(sessions.length / SESSION_LOG_PAGE_SIZE),
+      ),
+      filters: {
+        hotels: [
+          ...new Map(
+            sessions.map((session) => [
+              session.room.hotel.id,
+              session.room.hotel,
+            ]),
+          ).values(),
+        ].sort((left, right) => left.name.localeCompare(right.name)),
+        languages: [
+          ...new Set(sessions.map((session) => session.language)),
+        ].sort(),
+      },
+    };
   }
 }
 

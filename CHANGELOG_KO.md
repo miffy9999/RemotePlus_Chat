@@ -1,5 +1,28 @@
 # 프로젝트 변경 이력
 
+## 2026-07-24 15:22:56 +09:00
+
+### 수정한 파일
+
+- 완료 로그 API·검증·DB 인덱스: `apps/server/src/modules/chat-sessions/chat-sessions.controller.ts`, `chat-sessions.service.ts`, `dto/list-sessions.dto.ts`, `apps/server/prisma/schema.prisma`, `apps/server/prisma/migrations/20260724070000_add_log_pagination_index/migration.sql`
+- Agent 로그 API·화면·필터·다국어·스타일: `apps/agent-web/src/api.ts`, `main.tsx`, `session-filters.ts`, `i18n.tsx`, `styles.css`
+- 회귀 테스트: `apps/server/tests/chat-session-list.spec.ts`, `apps/agent-web/src/conversation-logs.test.ts`, `dashboard-layout.test.ts`, `session-filters.test.ts`
+- 문서: `README.md`, `docs/00_Base_Specification.md`, `docs/04_Database_Design.md`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 종료 로그 전체를 5초마다 진행 상담과 함께 내려받던 구조를 `OPEN` 자동 갱신과 `COMPLETED` 페이지 요청으로 분리했다.
+- 완료 로그는 검색어·호텔·언어 조건을 서버에서 적용하고 PostgreSQL `skip/take/count`로 페이지당 최대 100건만 반환한다. 최신 활동 시각이 같은 기록도 페이지 순서가 흔들리지 않도록 `lastActivityAt → createdAt → id` 내림차순으로 정렬한다.
+- Agent Log 탭에 이전·다음 버튼, 현재 페이지와 전체 건수를 표시하고 검색·필터 변경 시 1페이지부터 다시 조회한다.
+- `ChatSession(status, lastActivityAt)` 복합 인덱스와 마이그레이션을 추가해 완료 상태를 먼저 좁힌 뒤 최신 로그를 읽도록 했다.
+
+### 확인 방법
+
+- 서버 상담 목록 테스트에서 총 235건의 2페이지 요청이 `skip=100`, `take=100`, `totalPages=3`으로 처리되는지 확인했다.
+- Agent API·UI 테스트에서 페이지 크기 100, 검색·호텔·언어 쿼리, OPEN 폴링 분리와 페이지 이동 UI를 확인했다.
+- 전체 `pnpm lint`, 서버 57개·Agent 86개·Guest 18개 테스트, `pnpm build`, `git diff --check`가 모두 통과했다.
+- Docker 마이그레이션을 적용하고 PostgreSQL에서 `ChatSession_status_lastActivityAt_idx`의 실제 생성을 확인했다.
+- 관리자 Agent 화면의 Log에서 총 18건이 `1 / 1 · 18건`으로 표시되고 이전·다음 버튼이 비활성화되는지 확인했다. `TIMER_QA` 검색 후 서버 결과와 총 건수가 1건으로 바뀌는 것도 확인했다.
 ## 2026-07-24 14:56:08 +09:00
 
 ### 수정 파일

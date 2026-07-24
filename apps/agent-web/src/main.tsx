@@ -22,6 +22,7 @@ import {
   listAdminAgents,
   listHotels,
   listRooms,
+  listSessionLogs,
   listSessions,
   loginStaff,
   openSession,
@@ -654,6 +655,16 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const navigate = useNavigate();
   const isAdminView = auth.agent.role === "ADMIN";
   const [sessions, setSessions] = useState<SessionView[]>([]);
+  const [logSessions, setLogSessions] = useState<SessionView[]>([]);
+  const [logPage, setLogPage] = useState(1);
+  const [logTotal, setLogTotal] = useState(0);
+  const [logTotalPages, setLogTotalPages] = useState(1);
+  const [logHotels, setLogHotels] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
+  const [logLanguages, setLogLanguages] = useState<string[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
+  const [logRefreshToken, setLogRefreshToken] = useState(0);
   const [selected, setSelected] = useState<SessionView | null>(null);
   const [mode, setMode] = useState<"current" | "log">("current");
   const [search, setSearch] = useState("");
@@ -677,6 +688,7 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const notificationSocketRef = useRef<Socket | null>(null);
   const titleFlasherRef = useRef<TitleFlasher | null>(null);
   const refreshInProgress = useRef(false);
+  const logRequestIdRef = useRef(0);
   const sidebarResizeRef = useRef<{
     pointerId: number;
     startX: number;
@@ -733,7 +745,8 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     if (refreshInProgress.current) return;
     refreshInProgress.current = true;
     try {
-      const data = await listSessions(auth.accessToken);
+      // 5초 업무 폴링에서는 완료 Log를 제외해 로그가 늘어도 반복 응답 크기가 증가하지 않게 합니다.
+      const data = await listSessions(auth.accessToken, "OPEN");
       const newWaiting = findNewWaitingSessions(knownWaitingIds.current, data);
       knownWaitingIds.current = waitingSessionIds(data);
       const assignedActive = data.filter(
@@ -833,6 +846,55 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     };
   }, [auth.accessToken, auth.agent.id, isAdminView, language, t]);
 
+  useEffect(() => {
+    if (mode !== "log") return;
+    const requestId = ++logRequestIdRef.current;
+    // 검색 입력마다 즉시 DB 요청을 보내지 않고 짧게 기다려 마지막 조건만 조회합니다.
+    const timer = window.setTimeout(() => {
+      setLogLoading(true);
+      void listSessionLogs(auth.accessToken, {
+        page: logPage,
+        search,
+        hotelId: hotelFilter,
+        language: languageFilter,
+      })
+        .then((result) => {
+          if (requestId !== logRequestIdRef.current) return;
+          setLogSessions(result.items);
+          setLogTotal(result.total);
+          setLogTotalPages(result.totalPages);
+          setLogHotels(result.filters.hotels);
+          setLogLanguages(result.filters.languages);
+          // 필터 변경으로 마지막 페이지가 줄었으면 유효한 마지막 페이지를 다시 요청합니다.
+          if (logPage > result.totalPages) {
+            setLogPage(result.totalPages);
+          }
+          setError("");
+        })
+        .catch((reason) => {
+          if (requestId !== logRequestIdRef.current) return;
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : t("상담 기록을 불러오지 못했습니다."),
+          );
+        })
+        .finally(() => {
+          if (requestId === logRequestIdRef.current) setLogLoading(false);
+        });
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [
+    auth.accessToken,
+    hotelFilter,
+    languageFilter,
+    logPage,
+    logRefreshToken,
+    mode,
+    search,
+    t,
+  ]);
+
   const currentSessions = useMemo(
     () =>
       sortSessionsByRecentActivity(
@@ -845,19 +907,40 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       ),
     [auth.agent.id, isAdminView, sessions],
   );
-  const logSessions = useMemo(() => sessions.filter((session) => TERMINAL_SESSION_STATUSES.includes(session.status)), [sessions]);
-  const hotels = useMemo(() => [...new Set(sessions.map((session) => session.room.hotel.name))].sort(), [sessions]);
+  const hotels = useMemo(
+    () =>
+      [
+        ...new Map(
+          [
+            ...sessions.map((session) => session.room.hotel),
+            ...logHotels,
+          ].map((hotel) => [hotel.id, hotel]),
+        ).values(),
+      ].sort((left, right) => left.name.localeCompare(right.name)),
+    [logHotels, sessions],
+  );
   const languages = useMemo(
     () =>
-      [...new Set(sessions.map((session) => session.language.trim().toLowerCase()))]
+      [
+        ...new Set([
+          ...sessions.map((session) =>
+            session.language.trim().toLowerCase(),
+          ),
+          ...logLanguages.map((item) => item.trim().toLowerCase()),
+        ]),
+      ]
         .filter(Boolean)
         .sort(),
-    [sessions],
+    [logLanguages, sessions],
   );
-  const visibleSessions = filterAgentSessions(
-    mode === "current" ? currentSessions : logSessions,
-    { search, hotel: hotelFilter, language: languageFilter },
-  );
+  const visibleSessions =
+    mode === "current"
+      ? filterAgentSessions(currentSessions, {
+          search,
+          hotel: hotelFilter,
+          language: languageFilter,
+        })
+      : logSessions;
 
   async function choose(session: SessionView) {
     try {
@@ -890,6 +973,12 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     setNotice(null);
     setMode("current");
     setSelected(null);
+  }
+
+  function changeMode(nextMode: "current" | "log"): void {
+    setMode(nextMode);
+    setSelected(null);
+    if (nextMode === "log") setLogPage(1);
   }
 
   /** 구분선을 누른 시작 위치와 현재 너비를 기록해 포인터 이동량만큼 목록 폭을 변경합니다. */
@@ -1019,18 +1108,18 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         <aside className="line-agent-list">
           {/* 공통 사용자 메뉴를 제거해 상담 탭부터 목록 영역이 바로 시작됩니다. */}
           <div className="line-inbox-tabs">
-            <button className={mode === "current" ? "active" : ""} onClick={() => { setMode("current"); setSelected(null); }}>{t("Current chat room")} <em>{currentSessions.length}</em></button>
-            <button className={mode === "log" ? "active" : ""} onClick={() => { setMode("log"); setSelected(null); }}>{t("Log")} <em>{logSessions.length}</em></button>
+            <button className={mode === "current" ? "active" : ""} onClick={() => changeMode("current")}>{t("Current chat room")} <em>{currentSessions.length}</em></button>
+            <button className={mode === "log" ? "active" : ""} onClick={() => changeMode("log")}>{t("Log")} <em>{logTotal}</em></button>
           </div>
-          <label className="line-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("대화방, 메시지 검색")}/></label>
+          <label className="line-search"><span>⌕</span><input value={search} onChange={(event) => { setSearch(event.target.value); if (mode === "log") setLogPage(1); }} placeholder={t("대화방, 메시지 검색")}/></label>
           <div className="line-filters">
-            <select value={hotelFilter} onChange={(event) => setHotelFilter(event.target.value)} aria-label={t("호텔 필터")}><option value="">{t("전체 호텔")}</option>{hotels.map((hotel) => <option key={hotel}>{hotel}</option>)}</select>
-            <select value={languageFilter} onChange={(event) => setLanguageFilter(event.target.value)} aria-label={t("언어 필터")}><option value="">{t("전체 언어")}</option>{languages.map((language) => <option key={language} value={language}>{language.toUpperCase()}</option>)}</select>
-            <button onClick={() => void refresh()} aria-label={t("새로고침")}>↻</button>
+            <select value={hotelFilter} onChange={(event) => { setHotelFilter(event.target.value); if (mode === "log") setLogPage(1); }} aria-label={t("호텔 필터")}><option value="">{t("전체 호텔")}</option>{hotels.map((hotel) => <option key={hotel.id} value={hotel.id}>{hotel.name}</option>)}</select>
+            <select value={languageFilter} onChange={(event) => { setLanguageFilter(event.target.value); if (mode === "log") setLogPage(1); }} aria-label={t("언어 필터")}><option value="">{t("전체 언어")}</option>{languages.map((language) => <option key={language} value={language}>{language.toUpperCase()}</option>)}</select>
+            <button onClick={() => mode === "log" ? setLogRefreshToken((value) => value + 1) : void refresh()} aria-label={t("새로고침")}>↻</button>
           </div>
           {error && <div className="error-box line-inbox-error">{error}</div>}
           <div className="line-conversation-list">
-            {visibleSessions.length === 0 && <div className="line-empty"><span>{mode === "current" ? "✓" : "⌁"}</span><strong>{t(mode === "current" ? "현재 상담이 없습니다." : "조건에 맞는 기록이 없습니다.")}</strong></div>}
+            {visibleSessions.length === 0 && <div className="line-empty"><span>{mode === "current" ? "✓" : "⌁"}</span><strong>{t(mode === "current" ? "현재 상담이 없습니다." : logLoading ? "상담 기록을 불러오는 중입니다." : "조건에 맞는 기록이 없습니다.")}</strong></div>}
             {visibleSessions.map((session) => (
               <button key={session.id} className={`line-conversation-item ${selected?.id === session.id ? "selected" : ""}`} onClick={() => void choose(session)}>
                 <span className="line-room-avatar">{session.room.roomNumber.slice(-2)}</span>
@@ -1039,6 +1128,23 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
               </button>
             ))}
           </div>
+          {mode === "log" && (
+            <nav className="line-log-pagination" aria-label={t("상담 Log 페이지")}>
+              <button
+                disabled={logLoading || logPage <= 1}
+                onClick={() => { setSelected(null); setLogPage((page) => Math.max(1, page - 1)); }}
+              >
+                {t("이전")}
+              </button>
+              <span><strong>{logPage}</strong> / {logTotalPages}<small>{logTotal}{t("건")}</small></span>
+              <button
+                disabled={logLoading || logPage >= logTotalPages}
+                onClick={() => { setSelected(null); setLogPage((page) => Math.min(logTotalPages, page + 1)); }}
+              >
+                {t("다음")}
+              </button>
+            </nav>
+          )}
         </aside>
         <div
           className="line-sidebar-resizer"
