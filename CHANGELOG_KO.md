@@ -1,5 +1,30 @@
 # 프로젝트 변경 이력
 
+## 2026-07-24 13:49:10 +09:00
+
+### 수정한 파일
+
+- Agent 알림·관리자 실시간 대화: `apps/agent-web/src/main.tsx`, `agent-notification-policy.ts`, `notification-utils.ts`
+- 회귀 테스트: `agent-notification-policy.test.ts`, `notification-utils.test.ts`, `popup-style.test.ts`, `dashboard-layout.test.ts`
+- 문서: `README.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- Agent 화면이 보이고 브라우저 창이 포커스된 경우에는 새 상담·고객 메시지 팝업, 제목 점멸, 운영체제 알림을 생성하지 않도록 `visibilityState`와 `hasFocus()`를 함께 검사한다.
+- 알림음 상태·localStorage 저장 함수·토글 UI와 `AudioContext` 재생 코드를 제거했다. 백그라운드 운영체제 알림에도 `silent: true`를 지정해 앱과 시스템 알림을 모두 무음으로 유지한다.
+- ADMIN이 선택한 WAITING/ACTIVE 상담은 메시지 전송이 차단된 읽기 전용 상태를 유지하면서도 상담별 Socket.IO 방에는 입장한다. 따라서 Agent와 Guest의 새 `chat:message`가 관리자 메시지 목록에 즉시 병합된다.
+- 종료 상담 Log는 기존처럼 정적 읽기 전용으로 유지하며 불필요한 WebSocket 연결을 만들지 않는다.
+- DB 및 API 구조는 변경하지 않았다.
+
+### 확인 방법
+
+- `pnpm lint`, `pnpm test`, `pnpm build`로 전체 TypeScript 검사, Agent·Guest·Server 테스트, 프로덕션 빌드를 통과했다.
+- 활성·숨김·포커스 이탈 상태별 알림 정책과 알림음 상태·저장·UI·재생 코드 제거를 자동 테스트로 확인했다.
+- Docker 실제 화면에서 ADMIN과 일반 Agent 상단에 알림음 버튼이 없고 브라우저 알림·비밀번호 변경·로그아웃은 유지되는지 확인했다.
+- ADMIN이 WAITING 상담을 선택한 상태에서 Agent가 상담을 열고 `ADMIN_REALTIME_QA_1352`를 전송하자 화면 이동이나 새로고침 없이 관리자 목록과 본문에 즉시 표시됐다.
+- 이어서 Guest가 `GUEST_REALTIME_QA_1353`을 전송했을 때도 관리자 본문에 즉시 표시됐고, 관리자 입력은 계속 비활성 상태였다.
+- 검증용 상담은 Agent 종료 기능으로 정상 종료해 정리했다.
+
 ## 2026-07-24 12:55:13 +09:00
 
 ### 수정한 파일

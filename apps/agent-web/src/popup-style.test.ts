@@ -19,9 +19,13 @@ describe("Agent 화면 레이아웃과 팝업 CSS 격리", () => {
     expect(mainSource).not.toContain('<aside className="agent-notice"');
   });
 
-  /** 팝업은 항상 유지하되 알림음은 저장된 사용자 선택이 켜진 경우에만 호출해야 합니다. */
-  it("알림음 버튼과 조건부 재생 경계를 제공한다", () => {
-    expect(mainSource).toContain("aria-pressed={soundEnabled}");
-    expect(mainSource).toContain("if (soundEnabledRef.current) playNotificationSound()");
+  /** 화면을 직접 보는 동안 중복 팝업을 만들지 않고 모든 알림을 무음으로 유지해야 합니다. */
+  it("활성 화면 알림 차단과 무음 시스템 알림 경계를 제공한다", () => {
+    expect(mainSource).toContain("if (!shouldNotifyAgent(document)) return");
+    expect(mainSource).toContain(
+      "new Notification(title, { body, tag, silent: true })",
+    );
+    expect(mainSource).not.toContain("playNotificationSound");
+    expect(mainSource).not.toContain("AudioContext");
   });
 });

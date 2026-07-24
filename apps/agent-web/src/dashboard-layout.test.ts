@@ -55,21 +55,20 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
     expect(actions.indexOf('aria-hidden="true"')).toBeLessThan(actions.indexOf("<strong>{auth.agent.name}</strong>"));
     expect(actions.indexOf("<strong>{auth.agent.name}</strong>")).toBeLessThan(actions.indexOf("<LanguageSwitcher/>"));
     expect(actions.indexOf("<LanguageSwitcher/>")).toBeLessThan(actions.indexOf('className="line-agent-controls"'));
-    expect(actions.indexOf("onClick={toggleNotificationSound}")).toBeLessThan(actions.indexOf("notificationButtonLabel"));
     expect(actions.indexOf("notificationButtonLabel")).toBeLessThan(actions.indexOf('onClick={() => setShowPasswordChange(true)}'));
     expect(actions.indexOf('onClick={() => setShowPasswordChange(true)}')).toBeLessThan(actions.indexOf("onClick={logout}"));
     expect(mainSource).not.toContain("auth.agent.loginId");
   });
 
-  /** 기존 이벤트 핸들러를 그대로 사용해 메뉴 이동이 설정 기능을 끊지 않게 합니다. */
-  it("상단 메뉴에서 언어·알림·비밀번호·로그아웃 기능을 유지한다", () => {
+  /** 수신음은 제거하되 백그라운드 브라우저 알림과 계정 기능은 유지해야 합니다. */
+  it("상단 메뉴에서 언어·무음 알림·비밀번호·로그아웃 기능을 유지한다", () => {
     expect(mainSource).toContain("<LanguageSwitcher/>");
-    expect(mainSource).toContain("aria-pressed={soundEnabled}");
     expect(mainSource).toContain("notificationButtonLabel");
-    expect(mainSource).toContain("onClick={toggleNotificationSound}");
     expect(mainSource).toContain("onClick={() => void enableBrowserNotifications()}");
     expect(mainSource).toContain('onClick={() => setShowPasswordChange(true)}');
     expect(mainSource).toContain("onClick={logout}");
+    expect(mainSource).not.toContain("toggleNotificationSound");
+    expect(mainSource).not.toContain("playNotificationSound");
   });
 
   /** 사이드바에는 상담 탐색 요소만 남고 공통 메뉴가 중복 렌더링되지 않아야 합니다. */
@@ -181,6 +180,23 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
     expect(mainSource).toContain('socket.on("chat:session-closed", applyRealtimeSession)');
     expect(mainSource).toContain("setSessions((items) =>");
     expect(mainSource).toContain("setSelected((current) =>");
+  });
+
+  /** ADMIN은 쓰기 권한 없이 상담방을 구독해 Agent와 Guest의 새 메시지를 즉시 읽어야 합니다. */
+  it("관리자 읽기 전용 진행 상담도 WebSocket 상담방에 입장한다", () => {
+    expect(mainSource).toContain("const shouldJoinRealtime =");
+    expect(mainSource).toContain(
+      'adminReadOnly &&\n        (session.status === "WAITING" || session.status === "ACTIVE")',
+    );
+    expect(mainSource).toContain(
+      'socket.emitWithAck("chat:join", { sessionId: session.id })',
+    );
+    expect(mainSource).toContain(
+      'socket.on("chat:message", (message: MessageView) => setMessages',
+    );
+    expect(mainSource).toContain(
+      'if (!content || readOnly || session.status !== "ACTIVE"',
+    );
   });
 
   /** 타이머 다음에 종료 버튼을 렌더링하고 action 그룹을 오른쪽 끝으로 보내야 합니다. */
