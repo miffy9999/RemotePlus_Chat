@@ -13,7 +13,7 @@
 
 호텔 객실에 인쇄하여 비치한 고정 QR 코드 또는 전용 링크를 통해 투숙객이 별도의 앱 설치나 회원가입 없이 콜센터 직원과 실시간으로 채팅할 수 있도록 한다. QR 코드는 객실 생성 때 한 번 발급된 고객 전용 URL을 그대로 담으며 별도의 유효기간이나 정기 갱신을 두지 않는다.
 
-채팅 세션은 객실을 기준으로 생성한다. Guest는 Agent 배정 전 `WAITING`에서도 메시지를 보내 DB에 저장할 수 있으며 대기 시간만으로 만료되지 않는다. 15분 제한은 Agent가 대화를 처음 연 시점부터 계산하고, 상담원이 종료하거나 제한 시간이 지나면 더 이상 메시지를 보낼 수 없어야 한다.
+채팅 세션은 객실을 기준으로 생성한다. Guest는 Agent 배정 전 `WAITING`과 Agent가 열었지만 아직 첫 답변을 보내지 않은 `ACTIVE`에서도 메시지를 보내 DB에 저장할 수 있으며 대기 시간만으로 만료되지 않는다. 15분 제한은 Agent의 첫 메시지가 DB에 저장되는 시점부터 계산하고, 상담원이 종료하거나 제한 시간이 지나면 더 이상 메시지를 보낼 수 없어야 한다.
 
 ### MVP 목표
 
@@ -366,9 +366,10 @@ BLOCKED     관리 정책에 의해 차단
 ```mermaid
 stateDiagram-v2
     [*] --> WAITING
-    WAITING --> ACTIVE: Agent가 대화 열기
+    WAITING --> ACTIVE: Agent가 대화 열기 / 담당자만 배정
+    ACTIVE --> ACTIVE: Agent 첫 메시지 / startedAt·expiresAt 기록
     ACTIVE --> CLOSED: 상담원 종료
-    ACTIVE --> EXPIRED: 15분 경과
+    ACTIVE --> EXPIRED: 첫 Agent 메시지 후 15분 경과
     CLOSED --> [*]
     EXPIRED --> [*]
 ```
@@ -543,8 +544,8 @@ erDiagram
         string status
         string language
         string guestTokenHash
-        datetime startedAt
-        datetime expiresAt "nullable: WAITING은 null"
+        datetime startedAt "nullable: 첫 Agent 메시지 전 null"
+        datetime expiresAt "nullable: 첫 Agent 메시지 전 null"
         datetime closedAt
         string closeReason
         datetime lastActivityAt
@@ -648,6 +649,10 @@ sequenceDiagram
     D-->>S: 저장 성공
     S-->>G: chat:message-accepted
     S-->>A: chat:message
+    A->>S: 첫 chat:message
+    S->>D: 메시지 저장 + startedAt + expiresAt(15분) 원자 기록
+    S-->>G: chat:session-updated
+    S-->>A: chat:session-updated
 ```
 
 ---
@@ -661,7 +666,8 @@ sequenceDiagram
 - 세션이 존재하는가
 - 요청자가 해당 세션에 접근할 권한이 있는가
 - 세션 상태가 메시지를 보낼 수 있는 상태인가
-- 현재 시각이 `expiresAt` 이전인가
+- 첫 Agent 메시지 전이면 Guest 메시지인지, 첫 Agent 메시지면 타이머를 같은 트랜잭션에서 시작하는지
+- 타이머 시작 후에는 현재 시각이 `expiresAt` 이전인가
 - 메시지 길이가 제한 이내인가
 - 요청 횟수가 지나치게 많지 않은가
 - 동일한 메시지가 중복 전송된 것은 아닌가
@@ -733,7 +739,7 @@ flowchart TD
 5. 양쪽에서 실시간 텍스트 메시지를 주고받을 수 있다.
 6. 새로고침하거나 잠시 연결이 끊겨도 진행 중인 상담으로 재접속할 수 있다.
 7. 세션별 메시지가 서로 섞이지 않는다.
-8. 15분이 지나면 서버가 세션을 자동 종료한다.
+8. 첫 Agent 메시지가 저장된 뒤 15분이 지나면 서버가 세션을 자동 종료한다.
 9. 종료된 세션에서는 추가 메시지를 보낼 수 없다.
 10. 콜센터 직원이 상담을 직접 종료할 수 있다.
 11. 인증되지 않은 사용자는 콜센터 화면에 접근할 수 없다.

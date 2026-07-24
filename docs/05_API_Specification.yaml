@@ -114,7 +114,7 @@ paths:
         "409": { description: 이미 다른 Agent가 대화를 엶 }
   /agent/chat-sessions/{sessionId}/open:
     post:
-      summary: WAITING 대화 열기·Agent 원자 배정·15분 시작
+      summary: WAITING 대화 열기·Agent 원자 배정(15분은 첫 Agent 메시지 저장 시 시작)
       security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/SessionId"

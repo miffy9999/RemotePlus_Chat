@@ -8,7 +8,6 @@ import { EventEmitter2 } from "@nestjs/event-emitter";
 import type { SessionListScope } from "./dto/list-sessions.dto";
 import { PUBLIC_AGENT_SELECT, toPublicSession } from "./session-view";
 
-const SESSION_DURATION_MS = 15 * 60 * 1000;
 const CHAT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const RETENTION_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
@@ -56,7 +55,7 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
           roomId: guest.roomId,
           language,
           guestTokenHash: sha256(guestToken),
-          // WAITING 동안은 시간 제한을 두지 않고 Agent가 처음 대화를 열 때 15분을 시작합니다.
+          // WAITING과 담당자 배정 직후에는 시간 제한을 두지 않고, 담당 Agent의 첫 메시지를 저장할 때 15분을 시작합니다.
           expiresAt: null,
           messages: {
             create: {
@@ -141,15 +140,22 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** 별도 수락 화면 없이 대화를 여는 첫 Agent에게 원자 배정하고 그 순간부터 15분을 시작합니다. */
+  /**
+   * 별도 수락 화면 없이 대화를 여는 첫 Agent에게 원자 배정합니다.
+   * 이 단계에서는 상담사가 아직 답변하지 않았으므로 타이머를 시작하지 않고, 첫 Agent 메시지를 저장하는 트랜잭션에서 시작합니다.
+   */
   async open(id: string, agent: StaffTokenPayload) {
     const current = await this.findOrThrow(id);
     assertCanOpen(current.status, current.agentId, agent.sub);
     if (current.status === "ACTIVE" && current.agentId === agent.sub) return this.toPublic(current);
-    const startedAt = new Date();
     const result = await this.prisma.chatSession.updateMany({
       where: { id, status: "WAITING", agentId: null },
-      data: { status: "ACTIVE", agentId: agent.sub, startedAt, expiresAt: new Date(startedAt.getTime() + SESSION_DURATION_MS) },
+      data: {
+        status: "ACTIVE",
+        agentId: agent.sub,
+        startedAt: null,
+        expiresAt: null,
+      },
     });
     if (result.count !== 1) throw new ConflictException("다른 Agent가 먼저 대화를 열었습니다.");
     const opened = await this.get(id, agent);

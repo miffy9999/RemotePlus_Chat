@@ -94,11 +94,11 @@ Phase 2 코드 읽기 순서:
 5. Gateway로 돌아와 저장 후 승인·상대방 전파 순서를 확인한다.
 6. `tests/integration/verify-phase2.ts`에서 두 방 격리와 재연결 흐름을 따라간다.
 
-## 6단계 — 수락 시점 기준 15분 만료와 보안 이해
+## 6단계 — 첫 Agent 답변 기준 15분 만료와 보안 이해
 
 읽을 코드:
 
-1. WAITING의 null 만료 시각과 수락 트랜잭션의 `startedAt + 15분` 설정
+1. WAITING 및 담당자 배정 직후의 null 만료 시각과 첫 Agent 메시지 저장 트랜잭션의 `startedAt + 15분` 설정
 2. ACTIVE 전용 세션 만료 작업
 3. 메시지 전송 전 `expiresAt` 검사
 4. 인증·권한 미들웨어
@@ -130,9 +130,10 @@ Phase 3 화면 코드 읽기 순서:
 2. `apps/guest-web/src/main.tsx`에서 동의, 세션 복구, WAITING/ACTIVE/CLOSED 상태 전환을 따라간다.
 3. `apps/agent-web/src/api.ts`에서 통합 로그인·목록·대화 열기·종료·호텔 안내문 수정 요청을 확인한다.
 4. `apps/agent-web/src/main.tsx`에서 LINE형 Current/Log, 검색·필터, 한국어·일본어, WAITING 대화 열기와 읽기 전용 Log 분기를 읽는다.
-5. `chat-sessions.service.ts`의 nullable `expiresAt`, 호텔 SYSTEM 메시지 생성, 대화 열기 시 15분 원자 갱신을 확인한다.
-5. 서버의 `chat.gateway.ts`와 `chat-sessions.service.ts`로 이동해 화면 요청이 최종 검증되는 지점을 확인한다.
-6. `20260719084000_one_open_session_per_room` 마이그레이션에서 객실별 열린 상담 중복 방지 조건을 확인한다.
+5. `chat-sessions.service.ts`의 nullable `expiresAt`, 호텔 SYSTEM 메시지 생성, 대화 열기 시 담당자 원자 배정을 확인한다.
+6. `messages.service.ts`에서 첫 Agent 메시지와 `startedAt`·`expiresAt`을 같은 트랜잭션으로 기록하는 과정을 확인한다.
+7. 서버의 `chat.gateway.ts`와 `chat-sessions.service.ts`로 이동해 화면 요청이 최종 검증되는 지점을 확인한다.
+8. `20260719084000_one_open_session_per_room` 마이그레이션에서 객실별 열린 상담 중복 방지 조건을 확인한다.
 
 Phase 3A~5 코드 읽기 순서:
 

@@ -17,11 +17,13 @@ export function validateMessageInput(input: { sessionId?: unknown; clientMessage
 }
 
 /**
- * Guest는 WAITING에서도 문의를 미리 저장할 수 있지만 Agent는 담당 배정된 ACTIVE에서만 답변합니다.
- * ACTIVE에는 Agent가 대화를 연 시점에 계산한 만료시각이 반드시 있어야 합니다.
+ * Guest는 WAITING과 첫 Agent 답변 전 ACTIVE에서도 문의를 계속 저장할 수 있습니다.
+ * Agent의 첫 메시지는 메시지 서비스가 타이머를 원자적으로 만든 뒤 이 검사를 통과시킵니다.
  */
 export function assertSessionWritable(status: string, expiresAt: Date | null, senderKind: "guest" | "staff", now: Date = new Date()): void {
   if (senderKind === "guest" && status === "WAITING") return;
   if (status !== "ACTIVE") throw new ConflictException("진행 가능한 상담에서만 메시지를 보낼 수 있습니다.");
-  if (!expiresAt || expiresAt.getTime() <= now.getTime()) throw new ConflictException("상담 제한 시간이 만료되었습니다.");
+  if (senderKind === "guest" && expiresAt === null) return;
+  if (!expiresAt) throw new ConflictException("첫 Agent 답변의 상담 타이머가 아직 시작되지 않았습니다.");
+  if (expiresAt.getTime() <= now.getTime()) throw new ConflictException("상담 제한 시간이 만료되었습니다.");
 }

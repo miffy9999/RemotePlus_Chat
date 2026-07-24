@@ -25,6 +25,14 @@ describe("메시지 서버 검증 정책", () => {
     expect(() => assertSessionWritable("WAITING", null, "staff")).toThrow(ConflictException);
   });
 
+  /** Agent가 방을 열었지만 아직 답하지 않은 동안에도 Guest 문의는 계속 받고 Agent 타이머 초기화 누락은 차단합니다. */
+  it("첫 Agent 답변 전 ACTIVE에서는 Guest만 기존 정책 검사로 쓰기를 허용한다", () => {
+    expect(() => assertSessionWritable("ACTIVE", null, "guest")).not.toThrow();
+    expect(() => assertSessionWritable("ACTIVE", null, "staff")).toThrow(
+      ConflictException,
+    );
+  });
+
   /** 종료 상태나 만료 시각 이후 메시지는 클라이언트 UI와 무관하게 서버에서 차단합니다. */
   it("종료되거나 만료된 상담의 쓰기를 거절한다", () => {
     const now = new Date("2026-07-19T08:00:00.000Z");

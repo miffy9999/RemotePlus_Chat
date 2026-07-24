@@ -1,8 +1,23 @@
-import type { StoredGuestAccess } from "./api";
+import type { GuestSession, StoredGuestAccess } from "./api";
 
 /** 객실 접근 키마다 다른 기기 저장소 항목을 사용해 서로 다른 객실 상담 정보가 섞이지 않게 합니다. */
 function storageKey(accessKey: string): string {
   return `hotel-chat-guest:${accessKey}`;
+}
+
+/**
+ * WAITING과 첫 Agent 답변 전 ACTIVE는 만료시각이 없어도 정상 진행 상태입니다.
+ * 첫 답변 뒤에는 서버가 준 절대 만료시각만 사용해 복구와 입력 가능 여부를 동일하게 판단합니다.
+ */
+export function isGuestSessionOpen(
+  session: Pick<GuestSession, "status" | "expiresAt">,
+  nowMs: number = Date.now(),
+): boolean {
+  if (session.status === "WAITING") return true;
+  if (session.status !== "ACTIVE") return false;
+  if (session.expiresAt === null) return true;
+  const expiresAt = new Date(session.expiresAt).getTime();
+  return Number.isFinite(expiresAt) && expiresAt > nowMs;
 }
 
 /**
@@ -30,10 +45,8 @@ export function readStoredGuestAccess(accessKey: string, storage: Storage = loca
   try {
     const parsed: unknown = JSON.parse(raw);
     if (isStoredGuestAccess(parsed)) {
-      const expiresAt = parsed.session.expiresAt ? new Date(parsed.session.expiresAt).getTime() : null;
-      const terminal = parsed.session.status === "CLOSED" || parsed.session.status === "EXPIRED";
-      // WAITING은 Agent가 열기 전 만료시각이 없으므로 저장 시간을 이유로 복구 정보를 삭제하지 않습니다.
-      if (!terminal && (expiresAt === null || (Number.isFinite(expiresAt) && expiresAt > nowMs))) return parsed;
+      // WAITING과 첫 답변 전 ACTIVE는 만료시각이 null이어도 삭제하지 않습니다.
+      if (isGuestSessionOpen(parsed.session, nowMs)) return parsed;
     }
   } catch { /* 아래 공통 정리에서 손상된 JSON을 제거합니다. */ }
   storage.removeItem(key);

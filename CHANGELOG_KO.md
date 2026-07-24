@@ -1,5 +1,37 @@
 # 프로젝트 변경 이력
 
+## 2026-07-24 10:51:57 +09:00
+
+### 작업 기준
+
+- 실제 작업 경로: `C:\Users\전성현\Desktop\00_2026_Summer_Internship\Remote_plus\RemotePlus_Chat`
+- 원격 `origin/main`을 fetch하고 현재 브랜치를 fast-forward하여 양쪽 HEAD를 `be5bb97`로 일치시킨 뒤 작업을 시작했다.
+
+### 수정한 파일
+
+- 상담 타이머 서버: `chat-sessions.service.ts`, `session-policy.ts`, `messages.service.ts`, `message-policy.ts`
+- 데이터 보정: `20260723154000_start_timer_on_first_agent_message/migration.sql`
+- Agent·Guest 화면: 각 `main.tsx`, Agent `styles.css`, `i18n.tsx`, Guest `guest-access-storage.ts`
+- 회귀 테스트: `chat-session-lifecycle.spec.ts`, `message-activity.spec.ts`, `message-policy.spec.ts`, `dashboard-layout.test.ts`, `guest-access-storage.test.ts`
+- 문서: 기본 사양서, DB 설계, UI 설계, 사용 매뉴얼, 기능 현황
+
+### 수정 내용과 이유
+
+- Agent가 방을 여는 시점에는 담당자와 ACTIVE 상태만 기록하고, 첫 Agent 메시지를 저장하는 같은 DB 트랜잭션에서 `startedAt`과 `expiresAt=15분 뒤`를 기록하도록 변경했다.
+- 첫 답변 전 ACTIVE에서도 Agent와 Guest가 메시지를 입력할 수 있고 Guest가 새로고침 후 같은 상담으로 복귀하도록 nullable 만료시각 정책을 일치시켰다.
+- 첫 답변 직후 서버의 공개 상담 상태를 양쪽 WebSocket으로 보내 Agent 카운트다운이 서버 절대 시각으로 시작되게 했다.
+- 기존 ACTIVE 데이터는 첫 Agent 메시지 시각 기준으로 보정하고, 아직 답변이 없으면 타이머를 null로 되돌리는 마이그레이션을 추가했다.
+- Agent 사이드바의 알림음, 브라우저 알림, 비밀번호 변경, 로그아웃 4개 버튼을 2열×2행으로 고정했다.
+
+### 확인 방법
+
+- 첫 답변 전 타이머 null, 첫 Agent 메시지와 15분 타이머 원자 저장, Guest 선메시지·복구, UI 2행 배치를 자동 테스트한다.
+- `pnpm lint`, `pnpm test`(서버 55개·Agent 67개·Guest 15개), `pnpm build`, `git diff --check`를 모두 통과했다.
+- Docker 이미지를 새로 빌드했고 마이그레이션 컨테이너가 종료 코드 0, 서버가 healthy 상태임을 확인했다.
+- 실제 일본어 Guest 화면에서 Agent 배정 전에 메시지를 저장하고, Agent 화면에서 대화를 연 직후 `startedAt`·`expiresAt`이 null인 것을 DB로 확인했다.
+- Agent 첫 답변 뒤 화면 카운트다운이 `14:47`에서 `14:44`로 감소하고 Guest가 답변을 수신했다. DB에서도 시작·만료 시각의 차이가 정확히 900초이며 첫 Agent 메시지 시각과 시작 시각이 일치함을 확인했다.
+- Agent 사이드바 버튼 4개의 계산된 배치가 2열(`191px 191px`)×2행(`32px 32px`)인지 실제 브라우저에서 확인했다.
+
 ## 2026-07-23 16:36:23 +09:00
 
 ### 수정한 파일
