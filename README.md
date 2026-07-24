@@ -1,5 +1,9 @@
 # Hotel Call Center Chat
 
+## 運用ガイド
+
+- [RemotePlus Chat かんたん操作ガイド（PDF）](docs/RemotePlus_Chat_かんたん操作ガイド_1.1.pdf)
+
 Vercel + Render 무료 테스트 배포 절차는 [`docs/12_Free_Deployment_Guide.md`](docs/12_Free_Deployment_Guide.md)를 참고하세요.
 
 상업 출시 전 점검 항목은 [`docs/13_Commercial_Release_Checklist_KO.md`](docs/13_Commercial_Release_Checklist_KO.md), 오픈소스 고지는 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)를 참고하세요.
