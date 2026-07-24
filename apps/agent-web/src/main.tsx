@@ -83,6 +83,10 @@ import {
   readAgentSidebarWidth,
   saveAgentSidebarWidth,
 } from "./agent-layout";
+import {
+  nextRefreshFailureCount,
+  shouldShowReconnectNotice,
+} from "./refresh-connection";
 import "./styles.css";
 
 /** 한 로그인 폼에서 서버가 판별한 직원 역할에 따라 관리자 또는 Agent 업무 화면으로 이동합니다. */
@@ -654,6 +658,7 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const { language, locale, t } = useI18n();
   const navigate = useNavigate();
   const isAdminView = auth.agent.role === "ADMIN";
+  const displayedStaffName = isAdminView ? "管理者" : auth.agent.name;
   const [sessions, setSessions] = useState<SessionView[]>([]);
   const [logSessions, setLogSessions] = useState<SessionView[]>([]);
   const [logPage, setLogPage] = useState(1);
@@ -689,6 +694,7 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const titleFlasherRef = useRef<TitleFlasher | null>(null);
   const refreshInProgress = useRef(false);
   const logRequestIdRef = useRef(0);
+  const refreshFailureCount = useRef(0);
   const sidebarResizeRef = useRef<{
     pointerId: number;
     startX: number;
@@ -765,6 +771,7 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         );
       }
       setSessions(data);
+      refreshFailureCount.current = 0;
       setError("");
       if (newWaiting.length > 0) {
         const first = newWaiting[0];
@@ -781,8 +788,15 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           actionLabel: t("대기 상담 보기"),
         });
       }
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("상담 목록을 불러오지 못했습니다."));
+    } catch {
+      refreshFailureCount.current = nextRefreshFailureCount(
+        refreshFailureCount.current,
+      );
+      if (shouldShowReconnectNotice(refreshFailureCount.current)) {
+        setError(
+          t("서버에 다시 연결 중입니다. 기존 상담 목록은 유지됩니다."),
+        );
+      }
     } finally {
       refreshInProgress.current = false;
     }
@@ -1075,12 +1089,14 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         <div className="line-agent-topbar-actions">
           <div
             className="line-agent-account"
-            aria-label={`${t("로그인 계정")}: ${auth.agent.name}`}
-            title={auth.agent.name}
+            aria-label={`${t("로그인 계정")}: ${displayedStaffName}`}
+            title={displayedStaffName}
           >
             {/* 사용자 정보 안에서는 프로필 아이콘 다음에 상담원 이름을 표시합니다. */}
-            <span aria-hidden="true">{auth.agent.name.slice(0, 1).toUpperCase()}</span>
-            <strong>{auth.agent.name}</strong>
+            <span aria-hidden="true">
+              {displayedStaffName.slice(0, 1).toUpperCase()}
+            </span>
+            <strong>{displayedStaffName}</strong>
           </div>
           <LanguageSwitcher/>
           <div className="line-agent-controls">
@@ -2171,12 +2187,6 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         </div>
       </header>
       {error && <div className="error-box">{error}</div>}
-      <section className="admin-stats" aria-label={t("운영 현황")}>
-        <article><span>A</span><div><small>{t("등록 Agent")}</small><strong>{agents.length}</strong></div></article>
-        <article><span>H</span><div><small>{t("운영 호텔")}</small><strong>{hotels.length}</strong></div></article>
-        <article><span>R</span><div><small>{t("등록 룸")}</small><strong>{rooms.length}</strong></div></article>
-        <article><span>↗</span><div><small>{t("Guest 주소")}</small><strong>{rooms.filter((room) => room.guestUrl).length}</strong></div></article>
-      </section>
       <div className={`admin-dashboard${adminMenuCollapsed ? " menu-collapsed" : ""}`}>
         <aside className="admin-navigation" aria-label={t("관리 메뉴")}>
           <div className="admin-navigation-heading">

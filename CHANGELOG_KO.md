@@ -1,5 +1,26 @@
 # 프로젝트 변경 이력
 
+## 2026-07-24 15:35:00 +09:00
+
+### 수정 파일
+
+- Agent 화면: `apps/agent-web/src/main.tsx`, `i18n.tsx`, `styles.css`
+- 연결 상태 처리: `apps/agent-web/src/refresh-connection.ts`
+- 회귀 테스트: `apps/agent-web/src/refresh-connection.test.ts`, `dashboard-layout.test.ts`
+- 설계·운영 문서: `docs/Hotel_CallCenter_Chat_MVP_Design.md`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- 관리자 Dashboard에서 관리 메뉴와 내용이 겹치던 `登録Agent`, 호텔, 룸, Guest URL 요약 카드 네 개와 관련 반응형 스타일을 제거했다.
+- Agent의 5초 목록 갱신이 일시적으로 실패할 때 기존 상담 목록을 유지하고 1~2회 실패는 조용히 재시도한다. 연속 3회 실패부터 알아보기 쉬운 재연결 안내를 표시하고, 연결이 복구되면 안내를 자동으로 지운다.
+- ADMIN 계정은 데이터베이스에 저장된 이름 및 선택한 UI 언어와 무관하게 Agent 화면 상단에 항상 `管理者`로 표시한다. 일반 Agent는 기존처럼 등록된 직원 이름을 표시한다.
+- 더 이상 사용하지 않는 일본어 간단 조작 가이드 PDF, 제작용 HTML, 전용 UI 캡처 이미지와 README 링크를 제거했다.
+
+### 확인 방법
+
+- Agent lint, 단위·회귀 테스트, 프로덕션 build를 실행해 확인했다.
+- 원시 브라우저 오류 `Failed to fetch` 대신 단계형 재연결 안내를 사용하는지와 관리자 표시명·요약 카드 제거가 유지되는지 회귀 테스트를 추가했다.
+
 ## 2026-07-24 15:22:56 +09:00
 
 ### 수정한 파일
@@ -23,25 +44,6 @@
 - 전체 `pnpm lint`, 서버 57개·Agent 86개·Guest 18개 테스트, `pnpm build`, `git diff --check`가 모두 통과했다.
 - Docker 마이그레이션을 적용하고 PostgreSQL에서 `ChatSession_status_lastActivityAt_idx`의 실제 생성을 확인했다.
 - 관리자 Agent 화면의 Log에서 총 18건이 `1 / 1 · 18건`으로 표시되고 이전·다음 버튼이 비활성화되는지 확인했다. `TIMER_QA` 검색 후 서버 결과와 총 건수가 1건으로 바뀌는 것도 확인했다.
-## 2026-07-24 14:56:08 +09:00
-
-### 수정 파일
-
-- 시각형 운영 문서: `docs/RemotePlus_Chat_かんたん操作ガイド_1.1.pdf`, `docs/RemotePlus_Chat_かんたん操作ガイド_1.1.html`
-- 실제 UI 캡처 자산: `docs/manual-assets-admin-hotel-room.png`, `docs/manual-assets-agent-login.png`, `docs/manual-assets-guest-start.png`
-- 문서 링크: `README.md`
-
-### 수정 내용과 이유
-
-- 번역기 조작 가이드와 같은 현장용 형식으로, 관리자·상담 직원·고객의 실제 화면을 중심으로 한 일본어 간단 조작법 PDF를 새로 만들었다.
-- 관리자 호텔/객실 화면, 실제 직원 로그인 화면, 실제 고객 모바일 시작 화면을 넣고, 상담 화면은 현재 UI 구조를 기준으로 크게 풀어 처음 사용하는 사람도 순서대로 따라갈 수 있게 구성했다.
-- 호텔·객실 등록, QR 출력, 로그인, 상담 응답·종료, 고객 QR 접속, 문제 확인 순서로 8페이지를 구성했다.
-
-### 확인 방법
-
-- 로컬 Vite에서 실제 직원 로그인 화면과 고객 모바일 시작 화면을 캡처해 문서에 반영했다.
-- 제공된 관리자 호텔/객실 UI 캡처를 문서에 반영했다.
-- 브라우저에서 A4 인쇄 레이아웃과 표지·실제 UI 이미지 표시를 시각적으로 확인한 뒤 PDF로 출력했다.
 
 ## 2026-07-24 14:30:50 +09:00
 

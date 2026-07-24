@@ -229,7 +229,7 @@ flowchart LR
 - 시드는 새 DB에만 기본 테스트 비밀번호를 만들고 기존 계정 비밀번호를 반복 덮어쓰지 않아 사용자가 변경한 값이 Docker·Render 재시작 후에도 유지된다.
 - Guest에는 남은 시간을 표시하지 않는다. Agent 화면의 시간은 안내용이며 최종 전송 가능 여부는 서버의 상태와 nullable `expiresAt` 검사가 결정한다.
 - Agent와 고객 채팅은 새 메시지·종료 이벤트마다 채팅 컨테이너만 마지막 메시지로 자동 스크롤하며, 상담 목록으로 돌아갈 때는 이전 페이지 위치를 복원한다. Agent의 조건부 로그 안내·오류는 메시지 본문 안에 두어 입력창이 화면 최하단의 독립 행을 계속 유지하게 한다.
-- Agent 목록의 5초 폴링은 새 WAITING 상담 ID를 이전 목록과 비교한다. 해당 Agent에게 배정된 모든 ACTIVE 상담은 알림 전용 Socket.IO 연결이 방에 입장하며 고객 메시지를 즉시 목록에 반영한다. `document.visibilityState`와 `document.hasFocus()`를 함께 검사해 현재 Agent 화면을 보고 있을 때는 팝업을 만들지 않고 비활성 상태에서만 무음 팝업을 표시한다.
+- Agent 목록의 5초 폴링은 새 WAITING 상담 ID를 이전 목록과 비교한다. 폴링이 일시적으로 실패하면 기존 목록을 보존하고 자동 재시도하며, 3회 연속 실패할 때만 사용자에게 재연결 상태를 표시하고 성공 즉시 해제한다. 해당 Agent에게 배정된 모든 ACTIVE 상담은 알림 전용 Socket.IO 연결이 방에 입장하며 고객 메시지를 즉시 목록에 반영한다. `document.visibilityState`와 `document.hasFocus()`를 함께 검사해 현재 Agent 화면을 보고 있을 때는 팝업을 만들지 않고 비활성 상태에서만 무음 팝업을 표시한다.
 - 5초 폴링은 `OPEN` 범위만 요청해 WAITING·ACTIVE 목록을 갱신한다. 종료 로그는 `COMPLETED + page + pageSize=100` 요청으로 분리하고 서버가 검색·호텔·언어 조건, `skip/take`, 전체 건수 `count`를 적용해 현재 페이지와 전체 페이지 수를 반환한다.
 - Agent 탭·창이 비활성이면 새 상담 또는 고객 메시지 알림 시 `document.title`을 1초 간격으로 교대하고, `visibilitychange` 또는 창 `focus`에서 원래 제목과 타이머를 복구한다.
 - 메시지 저장 트랜잭션은 해당 세션의 `lastActivityAt`을 메시지 생성 시각으로 함께 갱신한다. 상담 목록 API는 전체 메시지를 반복 집계하지 않고 인덱스가 있는 이 컬럼으로 바로 정렬하며, Agent 진행 목록은 Socket 수신 직후에도 로컬 값을 먼저 갱신한다.

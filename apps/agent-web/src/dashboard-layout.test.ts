@@ -51,13 +51,25 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
 
     expect(topbarStart).toBeGreaterThan(-1);
     expect(topbar.indexOf('className="agent-brand"')).toBeLessThan(actionsStart);
-    expect(actions.indexOf('className="line-agent-account"')).toBeLessThan(actions.indexOf("<strong>{auth.agent.name}</strong>"));
-    expect(actions.indexOf('aria-hidden="true"')).toBeLessThan(actions.indexOf("<strong>{auth.agent.name}</strong>"));
-    expect(actions.indexOf("<strong>{auth.agent.name}</strong>")).toBeLessThan(actions.indexOf("<LanguageSwitcher/>"));
+    expect(actions.indexOf('className="line-agent-account"')).toBeLessThan(actions.indexOf("<strong>{displayedStaffName}</strong>"));
+    expect(actions.indexOf('aria-hidden="true"')).toBeLessThan(actions.indexOf("<strong>{displayedStaffName}</strong>"));
+    expect(actions.indexOf("<strong>{displayedStaffName}</strong>")).toBeLessThan(actions.indexOf("<LanguageSwitcher/>"));
     expect(actions.indexOf("<LanguageSwitcher/>")).toBeLessThan(actions.indexOf('className="line-agent-controls"'));
     expect(actions.indexOf("notificationButtonLabel")).toBeLessThan(actions.indexOf('onClick={() => setShowPasswordChange(true)}'));
     expect(actions.indexOf('onClick={() => setShowPasswordChange(true)}')).toBeLessThan(actions.indexOf("onClick={logout}"));
     expect(mainSource).not.toContain("auth.agent.loginId");
+  });
+
+  /** ADMIN 계정은 저장된 이름이나 UI 언어와 무관하게 일본어 관리자명으로 표시해야 합니다. */
+  it("관리자 계정 표시명을 항상 管理者로 고정한다", () => {
+    expect(mainSource).toContain(
+      'const displayedStaffName = isAdminView ? "管理者" : auth.agent.name;',
+    );
+    expect(mainSource).toContain(
+      'aria-label={`${t("로그인 계정")}: ${displayedStaffName}`}',
+    );
+    expect(mainSource).toContain("title={displayedStaffName}");
+    expect(mainSource).toContain("<strong>{displayedStaffName}</strong>");
   });
 
   /** 수신음은 제거하되 백그라운드 브라우저 알림과 계정 기능은 유지해야 합니다. */
@@ -147,6 +159,24 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
     );
   });
 
+  /** 호텔·Agent 관리 메뉴와 중복되는 네 개의 단순 집계 카드는 다시 노출하지 않습니다. */
+  it("관리자 Dashboard에서 등록 Agent부터 이어지는 요약 카드 네 개를 제거한다", () => {
+    expect(mainSource).not.toContain('className="admin-stats"');
+    expect(styles).not.toContain(".admin-stats");
+  });
+
+  /** Render가 잠깐 응답하지 않아도 기존 상담 목록을 지우거나 원시 오류를 바로 노출하지 않습니다. */
+  it("Agent 목록 갱신 실패를 누적해 세 번째부터 재연결 안내를 표시한다", () => {
+    expect(mainSource).toContain("refreshFailureCount.current = 0");
+    expect(mainSource).toContain("nextRefreshFailureCount(");
+    expect(mainSource).toContain(
+      "shouldShowReconnectNotice(refreshFailureCount.current)",
+    );
+    expect(mainSource).toContain(
+      "서버에 다시 연결 중입니다. 기존 상담 목록은 유지됩니다.",
+    );
+  });
+
   /** 호텔·룸과 자동 안내문이 별도 카드로 다시 분리돼 긴 화면처럼 보이지 않게 합니다. */
   it("호텔 자원과 자동 안내문을 하나의 관리 카드에 배치한다", () => {
     expect(mainSource).toContain(
@@ -186,8 +216,8 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
   /** ADMIN은 쓰기 권한 없이 상담방을 구독해 Agent와 Guest의 새 메시지를 즉시 읽어야 합니다. */
   it("관리자 읽기 전용 진행 상담도 WebSocket 상담방에 입장한다", () => {
     expect(mainSource).toContain("const shouldJoinRealtime =");
-    expect(mainSource).toContain(
-      'adminReadOnly &&\n        (session.status === "WAITING" || session.status === "ACTIVE")',
+    expect(mainSource).toMatch(
+      /adminReadOnly\s*&&\s*\(session\.status === "WAITING" \|\| session\.status === "ACTIVE"\)/,
     );
     expect(mainSource).toContain(
       'socket.emitWithAck("chat:join", { sessionId: session.id })',
