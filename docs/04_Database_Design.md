@@ -14,7 +14,7 @@
 
 - 룸: `hotelId + status`
 - 접근 키: `roomId + status`
-- 상담: `status + createdAt`, `roomId + status`, `status + closedAt`(30일 보존 만료 정리)
+- 상담: `status + createdAt`, `roomId + status`, `status + closedAt`(30일 보존 만료 정리), `status + lastActivityAt`(완료 로그 최신순 페이지네이션)
 - 메시지: `sessionId + createdAt`
 
 ## 보안 저장 원칙
@@ -38,3 +38,10 @@
 - 진행 가능한 `WAITING`, `ACTIVE` 상담과 `closedAt`이 없는 데이터는 자동 삭제하지 않는다.
 - `ChatSession` 삭제 시 외래 키의 `onDelete: Cascade`로 하위 `Message`도 같은 트랜잭션에서 삭제한다.
 - 무료 플랜 DB 부하를 제한하기 위해 서버 시작 후 한 번 확인하고 이후 24시간에 한 번만 인덱스 조건의 `deleteMany`를 실행한다.
+
+## 완료 로그 페이지네이션 규칙
+
+- 완료 상태(`CLOSED`, `EXPIRED`, `CANCELLED`, `BLOCKED`)만 서버에서 조회하며 한 페이지 크기는 최대 100건으로 고정한다.
+- 서버는 검색어·호텔·언어 조건을 Prisma `where`에 포함하고 `skip=(page-1)*100`, `take=100`과 동일 조건의 `count`를 실행한다.
+- 최신 활동 순서가 같은 행도 페이지 간 순서가 흔들리지 않도록 `lastActivityAt`, `createdAt`, `id`를 차례로 내림차순 정렬한다.
+- `ChatSession(status, lastActivityAt)` 복합 인덱스는 완료 상태 범위를 먼저 좁히고 최신 기록부터 읽도록 돕는다.

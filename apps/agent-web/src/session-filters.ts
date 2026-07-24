@@ -24,7 +24,7 @@ export function filterAgentSessions(
 
     return (
       (!needle || searchable.includes(needle)) &&
-      (!filters.hotel || session.room.hotel.name === filters.hotel) &&
+      (!filters.hotel || session.room.hotel.id === filters.hotel) &&
       (!language || sessionLanguage === language)
     );
   });

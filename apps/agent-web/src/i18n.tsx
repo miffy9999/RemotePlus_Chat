@@ -40,6 +40,11 @@ Object.assign(ja, {
   "관리자 조회 모드입니다. 모든 상담을 읽을 수 있지만 메시지를 보내거나 담당자로 배정될 수 없습니다.":
     "管理者閲覧モードです。すべての相談を閲覧できますが、メッセージ送信や担当者への割り当てはできません。",
   "관리자 읽기 전용 조회입니다": "管理者の読み取り専用閲覧です",
+  "상담 Log 페이지": "相談履歴ページ",
+  "이전": "前へ",
+  "다음": "次へ",
+  "건": "件",
+  "상담 기록을 불러오는 중입니다.": "相談履歴を読み込んでいます。",
 });
 
 interface LanguageContextValue { language: UiLanguage; setLanguage: (language: UiLanguage) => void; t: (text: string) => string; locale: string; }

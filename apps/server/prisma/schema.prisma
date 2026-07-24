@@ -105,6 +105,7 @@ model ChatSession {
   messages    Message[]
   @@index([status, createdAt])
   @@index([status, closedAt])
+  @@index([status, lastActivityAt])
   @@index([lastActivityAt])
   @@index([roomId, status])
 }

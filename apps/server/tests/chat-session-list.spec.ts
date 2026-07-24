@@ -65,4 +65,71 @@ describe("상담 목록 범위", () => {
       status: { in: ["WAITING", "ACTIVE"] },
     });
   });
+
+  /** 완료 Log는 전체 행을 메모리에 올리지 않고 DB skip/take와 count로 100건 단위 응답을 만들어야 합니다. */
+  it("COMPLETED Log를 100건씩 DB 페이지네이션한다", async () => {
+    const session = {
+      id: "session-id",
+      status: "CLOSED",
+      language: "ja",
+      agentId: null,
+      agent: null,
+      startedAt: null,
+      expiresAt: null,
+      closedAt: new Date(),
+      createdAt: new Date(),
+      lastActivityAt: new Date(),
+      room: {
+        roomNumber: "101",
+        hotel: { id: "hotel-id", name: "테스트 호텔" },
+      },
+      messages: [],
+    };
+    const findMany = jest
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([session])
+      .mockResolvedValueOnce([{ language: "ja" }]);
+    const count = jest.fn().mockResolvedValue(235);
+    const hotelFindMany = jest
+      .fn()
+      .mockResolvedValue([{ id: "hotel-id", name: "테스트 호텔" }]);
+    const service = new ChatSessionsService(
+      {
+        chatSession: { findMany, count },
+        hotel: { findMany: hotelFindMany },
+      } as never,
+      { emit: jest.fn() } as never,
+    );
+
+    const result = await service.list(undefined, admin, "COMPLETED", {
+      page: 2,
+      pageSize: 100,
+      hotelId: "hotel-id",
+      language: "ja",
+      search: "수건",
+    });
+
+    const pageQuery = findMany.mock.calls[1][0];
+    expect(pageQuery.skip).toBe(100);
+    expect(pageQuery.take).toBe(100);
+    expect(pageQuery.orderBy).toEqual([
+      { lastActivityAt: "desc" },
+      { createdAt: "desc" },
+      { id: "desc" },
+    ]);
+    expect(count).toHaveBeenCalledWith({ where: pageQuery.where });
+    expect(result).toEqual(
+      expect.objectContaining({
+        total: 235,
+        page: 2,
+        pageSize: 100,
+        totalPages: 3,
+        filters: {
+          hotels: [{ id: "hotel-id", name: "테스트 호텔" }],
+          languages: ["ja"],
+        },
+      }),
+    );
+  });
 });
