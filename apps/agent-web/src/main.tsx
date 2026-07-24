@@ -57,7 +57,13 @@ import {
   waitingSessionIds,
 } from "./notification-utils";
 import { createTitleFlasher, type TitleFlasher } from "./title-flasher";
-import { staffHomePath } from "./staff-routing";
+import {
+  ADMIN_AGENT_WORKSPACE_PATH,
+  ADMIN_DASHBOARD_PATH,
+  AGENT_WORKSPACE_PATH,
+  canAccessStaffPath,
+  staffHomePath,
+} from "./staff-routing";
 import { filterConversationLogs } from "./conversation-logs";
 import {
   readLoginPreference,
@@ -487,12 +493,14 @@ function LineConversationPanel({
   auth,
   initial,
   readOnly,
+  adminReadOnly,
   onBack,
   onChanged,
 }: {
   auth: AgentAuth;
   initial: SessionView;
   readOnly: boolean;
+  adminReadOnly: boolean;
   onBack: () => void;
   onChanged: (session: SessionView) => void;
 }): React.JSX.Element {
@@ -500,7 +508,9 @@ function LineConversationPanel({
   const [session, setSession] = useState(initial);
   const [messages, setMessages] = useState<MessageView[]>([]);
   const [input, setInput] = useState("");
-  const [connection, setConnection] = useState(readOnly ? "기록 보기" : "연결 중");
+  const [connection, setConnection] = useState(
+    readOnly ? (adminReadOnly ? "관리자 조회" : "기록 보기") : "연결 중",
+  );
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
@@ -514,7 +524,10 @@ function LineConversationPanel({
     void getMessages(auth.accessToken, session.id)
       .then((history) => { if (active) setMessages(history); })
       .catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : t("상담 기록을 불러오지 못했습니다.")); });
-    if (readOnly) { setConnection("기록 보기"); return () => { active = false; }; }
+    if (readOnly) {
+      setConnection(adminReadOnly ? "관리자 조회" : "기록 보기");
+      return () => { active = false; };
+    }
     const socket = io(SOCKET_URL, { auth: { staffToken: auth.accessToken }, transports: ["websocket"] });
     socketRef.current = socket;
     socket.on("connect", async () => {
@@ -537,7 +550,7 @@ function LineConversationPanel({
     });
     socket.on("chat:error", (payload: { message: string }) => setError(payload.message));
     return () => { active = false; socket.disconnect(); socketRef.current = null; };
-  }, [auth.accessToken, readOnly, session.id, t]);
+  }, [adminReadOnly, auth.accessToken, readOnly, session.id, t]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
   useEffect(() => { messageEndRef.current?.scrollIntoView({ behavior: messages.length > 1 ? "smooth" : "auto" }); }, [messages.length]);
 
@@ -570,22 +583,29 @@ function LineConversationPanel({
       <header className="line-conversation-header">
         <button className="line-mobile-back" onClick={onBack} aria-label={t("목록")}>‹</button>
         <span className="line-room-avatar">{session.room.roomNumber.slice(-2)}</span>
-        <div><h2>{session.room.hotel.name} · {session.room.roomNumber}{t("호")}</h2><p>{session.language.toUpperCase()} · {t(session.status)}</p></div>
+        <div className="line-conversation-identity">
+          <h2>{session.room.hotel.name} · {session.room.roomNumber}{t("호")}</h2>
+          <p>
+            <span>{session.language.toUpperCase()} · {t(session.status)}</span>
+            <span>{t("담당 상담원")}: <strong>{session.agent?.name ?? t("담당자 없음")}</strong></span>
+            <span className={`line-connection ${connection === "연결됨" ? "ok" : ""}`}>● {t(connection)}</span>
+          </p>
+        </div>
+        {/* 시간 다음에 종료 버튼을 두고 그룹 전체를 자동 여백으로 오른쪽 끝에 정렬합니다. */}
         <div className="line-conversation-actions">
-          <span className={`line-connection ${connection === "연결됨" ? "ok" : ""}`}>● {t(connection)}</span>
-          {writable && <button className="danger compact" onClick={() => setShowCloseConfirm(true)}>{t("상담 종료")}</button>}
           {session.status === "ACTIVE" && (
-            <strong>
+            <strong aria-label={t("채팅 만료 시간")}>
               {session.expiresAt
                 ? remainingTime(session.expiresAt, now)
                 : t("첫 답변 후 15분")}
             </strong>
           )}
+          {writable && <button className="danger compact" onClick={() => setShowCloseConfirm(true)}>{t("상담 종료")}</button>}
         </div>
       </header>
       {/* 조건부 배너와 오류를 본문 안에 묶어도 헤더·본문·입력창의 세 행 구조가 변하지 않게 합니다. */}
       <div className="line-conversation-body">
-        {readOnly && <div className="line-log-banner">{t("종료된 상담 기록입니다. 모든 Agent가 읽을 수 있지만 메시지는 보낼 수 없습니다.")}</div>}
+        {readOnly && <div className="line-log-banner">{t(adminReadOnly ? "관리자 조회 모드입니다. 모든 상담을 읽을 수 있지만 메시지를 보내거나 담당자로 배정될 수 없습니다." : "종료된 상담 기록입니다. 모든 Agent가 읽을 수 있지만 메시지는 보낼 수 없습니다.")}</div>}
         {error && <div className="error-box line-chat-error">{error}</div>}
         <div className="line-chat-messages">
           {messages.length === 0 && <div className="empty">{t("아직 메시지가 없습니다.")}</div>}
@@ -600,7 +620,7 @@ function LineConversationPanel({
       </div>
       <form className="line-chat-composer" onSubmit={send}>
         <span aria-hidden="true">＋</span>
-        <input value={input} onChange={(event) => setInput(event.target.value)} maxLength={1000} disabled={!writable} placeholder={t(readOnly ? "종료된 상담 기록입니다" : "메시지를 입력하세요")}/>
+        <input value={input} onChange={(event) => setInput(event.target.value)} maxLength={1000} disabled={!writable} placeholder={t(adminReadOnly ? "관리자 읽기 전용 조회입니다" : readOnly ? "종료된 상담 기록입니다" : "메시지를 입력하세요")}/>
         <button disabled={!writable || !input.trim()}>{t("전송")}</button>
       </form>
       {showCloseConfirm && <div className="modal-backdrop"><section className="confirm-modal" role="dialog" aria-modal="true"><h2>{t("상담을 종료할까요?")}</h2><p>{t("종료한 상담에는 더 이상 메시지를 보낼 수 없습니다.")}</p><div><button className="secondary" onClick={() => setShowCloseConfirm(false)}>{t("취소")}</button><button className="danger" onClick={() => void closeConversation()}>{t("상담 종료")}</button></div></section></div>}
@@ -611,6 +631,8 @@ function LineConversationPanel({
 /** Agent 업무 화면을 LINE처럼 왼쪽 Current/Log 목록과 오른쪽 대화 본문으로 고정합니다. */
 function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const { language, locale, t } = useI18n();
+  const navigate = useNavigate();
+  const isAdminView = auth.agent.role === "ADMIN";
   const [sessions, setSessions] = useState<SessionView[]>([]);
   const [selected, setSelected] = useState<SessionView | null>(null);
   const [mode, setMode] = useState<"current" | "log">("current");
@@ -699,7 +721,8 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       knownWaitingIds.current = waitingSessionIds(data);
       const assignedActive = data.filter(
         (session) =>
-          session.status === "ACTIVE" && session.agentId === auth.agent.id,
+          session.status === "ACTIVE" &&
+          (isAdminView || session.agentId === auth.agent.id),
       );
       activeSessionsRef.current = new Map(
         assignedActive.map((session) => [session.id, session]),
@@ -738,12 +761,31 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   useEffect(() => {
     const socket = io(SOCKET_URL, { auth: { staffToken: auth.accessToken }, transports: ["websocket"] });
     notificationSocketRef.current = socket;
+    /** 수락·종료 이벤트의 실제 담당자 관계를 목록과 선택 상세에 같은 객체로 즉시 반영합니다. */
+    const applyRealtimeSession = (updated: SessionView) => {
+      setSessions((items) =>
+        items.map((item) =>
+          item.id === updated.id
+            ? {
+                ...item,
+                ...updated,
+                lastMessage: updated.lastMessage ?? item.lastMessage,
+              }
+            : item,
+        ),
+      );
+      setSelected((current) =>
+        current?.id === updated.id ? { ...current, ...updated } : current,
+      );
+    };
     const joinAssignedSessions = () =>
       activeSessionsRef.current.forEach((session) =>
         socket.emit("chat:join", { sessionId: session.id }),
       );
     socket.on("connect", joinAssignedSessions);
     socket.on("chat:inbox-updated", () => void refresh());
+    socket.on("chat:session-updated", applyRealtimeSession);
+    socket.on("chat:session-closed", applyRealtimeSession);
     socket.on("chat:message", (message: MessageView) => {
       if (message.senderType !== "GUEST") return;
       const session = activeSessionsRef.current.get(message.sessionId);
@@ -772,9 +814,20 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       socket.disconnect();
       notificationSocketRef.current = null;
     };
-  }, [auth.accessToken, auth.agent.id, language, t]);
+  }, [auth.accessToken, auth.agent.id, isAdminView, language, t]);
 
-  const currentSessions = useMemo(() => sortSessionsByRecentActivity(sessions.filter((session) => session.status === "WAITING" || (session.status === "ACTIVE" && session.agentId === auth.agent.id))), [sessions, auth.agent.id]);
+  const currentSessions = useMemo(
+    () =>
+      sortSessionsByRecentActivity(
+        sessions.filter(
+          (session) =>
+            session.status === "WAITING" ||
+            (session.status === "ACTIVE" &&
+              (isAdminView || session.agentId === auth.agent.id)),
+        ),
+      ),
+    [auth.agent.id, isAdminView, sessions],
+  );
   const logSessions = useMemo(() => sessions.filter((session) => TERMINAL_SESSION_STATUSES.includes(session.status)), [sessions]);
   const hotels = useMemo(() => [...new Set(sessions.map((session) => session.room.hotel.name))].sort(), [sessions]);
   const languages = useMemo(
@@ -791,6 +844,11 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
 
   async function choose(session: SessionView) {
     try {
+      // ADMIN은 전체 상담을 특별 조회만 하며 WAITING 상담을 자기 담당으로 가져오지 않습니다.
+      if (isAdminView) {
+        setSelected(session);
+        return;
+      }
       const opened = session.status === "WAITING" ? await openSession(auth.accessToken, session.id) : session;
       setSelected(opened);
       await refresh();
@@ -886,7 +944,7 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     saveAgentSidebarWidth(window.localStorage, next);
   }
 
-  function logout() { clearStoredAuth("AGENT"); location.href = "/login"; }
+  function logout() { clearStoredAuth(auth.agent.role); location.href = "/login"; }
   /** 종료·만료 상태를 현재 본문에 반영하되 상담원이 직접 Log를 누르기 전에는 탭을 바꾸지 않습니다. */
   function updateSelectedConversation(updated: SessionView): void {
     setSelected(updated);
@@ -902,73 +960,99 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         : t("브라우저 알림 켜기");
 
   return (
-    <div
-      className={`line-agent-workspace ${selected ? "has-selection" : ""}`}
-      style={{
-        gridTemplateColumns: `${sidebarWidth}px 8px minmax(0, 1fr)`,
-      }}
-    >
-      <aside className="line-agent-list">
-        <header className="line-agent-header">
-          <div className="line-agent-header-primary">
-            <div className="agent-brand">REMOTE<span>+</span></div>
-            <div
-              className="line-agent-account"
-              aria-label={`${t("로그인 계정")}: ${auth.agent.name}`}
-              title={auth.agent.name}
-            >
-              <span aria-hidden="true">{auth.agent.name.slice(0, 1).toUpperCase()}</span>
-              <strong>{auth.agent.name}</strong>
-            </div>
-            <LanguageSwitcher/>
+    <div className="line-agent-shell">
+      {/* 상담 목록 폭과 관계없이 공통 메뉴가 화면 전체 너비를 사용하도록 업무 영역 바깥에 둡니다. */}
+      <header className="line-agent-topbar">
+        <div className="agent-brand">REMOTE<span>+</span></div>
+        {isAdminView && (
+          <button
+            className="line-agent-admin-link secondary"
+            onClick={() => navigate(ADMIN_DASHBOARD_PATH)}
+          >
+            {t("관리자 페이지")}
+          </button>
+        )}
+        {/* DOM 순서를 화면 요구사항과 같게 두어 사용자 정보가 오른쪽 설정 메뉴의 첫 항목이 되게 합니다. */}
+        <div className="line-agent-topbar-actions">
+          <div
+            className="line-agent-account"
+            aria-label={`${t("로그인 계정")}: ${auth.agent.name}`}
+            title={auth.agent.name}
+          >
+            {/* 사용자 정보 안에서는 프로필 아이콘 다음에 상담원 이름을 표시합니다. */}
+            <span aria-hidden="true">{auth.agent.name.slice(0, 1).toUpperCase()}</span>
+            <strong>{auth.agent.name}</strong>
           </div>
+          <LanguageSwitcher/>
           <div className="line-agent-controls">
-            <button className="link-button" aria-pressed={soundEnabled} onClick={toggleNotificationSound}>{t(soundEnabled ? "알림음 끄기" : "알림음 켜기")}</button>
-            <button className="link-button" disabled={notificationPermission !== "default"} onClick={() => void enableBrowserNotifications()}>{notificationButtonLabel}</button>
-            <button className="link-button" onClick={() => setShowPasswordChange(true)}>{t("비밀번호 변경")}</button>
-            <button className="link-button" onClick={logout}>{t("로그아웃")}</button>
-          </div>
-        </header>
-        <div className="line-inbox-tabs">
-          <button className={mode === "current" ? "active" : ""} onClick={() => { setMode("current"); setSelected(null); }}>{t("Current chat room")} <em>{currentSessions.length}</em></button>
-          <button className={mode === "log" ? "active" : ""} onClick={() => { setMode("log"); setSelected(null); }}>{t("Log")} <em>{logSessions.length}</em></button>
-        </div>
-        <label className="line-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("대화방, 메시지 검색")}/></label>
-        <div className="line-filters">
-          <select value={hotelFilter} onChange={(event) => setHotelFilter(event.target.value)} aria-label={t("호텔 필터")}><option value="">{t("전체 호텔")}</option>{hotels.map((hotel) => <option key={hotel}>{hotel}</option>)}</select>
-          <select value={languageFilter} onChange={(event) => setLanguageFilter(event.target.value)} aria-label={t("언어 필터")}><option value="">{t("전체 언어")}</option>{languages.map((language) => <option key={language} value={language}>{language.toUpperCase()}</option>)}</select>
-          <button onClick={() => void refresh()} aria-label={t("새로고침")}>↻</button>
-        </div>
-        {error && <div className="error-box line-inbox-error">{error}</div>}
-        <div className="line-conversation-list">
-          {visibleSessions.length === 0 && <div className="line-empty"><span>{mode === "current" ? "✓" : "⌁"}</span><strong>{t(mode === "current" ? "현재 상담이 없습니다." : "조건에 맞는 기록이 없습니다.")}</strong></div>}
-          {visibleSessions.map((session) => (
-            <button key={session.id} className={`line-conversation-item ${selected?.id === session.id ? "selected" : ""}`} onClick={() => void choose(session)}>
-              <span className="line-room-avatar">{session.room.roomNumber.slice(-2)}</span>
-              <span><strong>{session.room.hotel.name} · {session.room.roomNumber}{t("호")}</strong><small>{session.lastMessage?.content ?? t(session.status === "WAITING" ? "새 문의가 도착했습니다." : session.status)}</small><em>{session.language.toUpperCase()}{mode === "log" ? ` · ${session.agent?.name ?? t("삭제된 Agent")}` : ""}</em></span>
-              <time>{new Date(session.lastMessage?.createdAt ?? session.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</time>
+            <button className="link-button" aria-pressed={soundEnabled} onClick={toggleNotificationSound}>
+              <span className="line-agent-control-icon" aria-hidden="true">{soundEnabled ? "🔇" : "🔊"}</span>
+              <span className="line-agent-control-label">{t(soundEnabled ? "알림음 끄기" : "알림음 켜기")}</span>
             </button>
-          ))}
+            <button className="link-button" disabled={notificationPermission !== "default"} onClick={() => void enableBrowserNotifications()}>
+              <span className="line-agent-control-icon" aria-hidden="true">♢</span>
+              <span className="line-agent-control-label">{notificationButtonLabel}</span>
+            </button>
+            <button className="link-button" onClick={() => setShowPasswordChange(true)}>
+              <span className="line-agent-control-icon" aria-hidden="true">🔑</span>
+              <span className="line-agent-control-label">{t("비밀번호 변경")}</span>
+            </button>
+            <button className="link-button" onClick={logout}>
+              <span className="line-agent-control-icon" aria-hidden="true">↪</span>
+              <span className="line-agent-control-label">{t("로그아웃")}</span>
+            </button>
+          </div>
         </div>
-      </aside>
+      </header>
       <div
-        className="line-sidebar-resizer"
-        role="separator"
-        aria-label={t("목록과 대화창 너비 조절")}
-        aria-orientation="vertical"
-        aria-valuemin={AGENT_SIDEBAR_MIN_WIDTH}
-        aria-valuemax={AGENT_SIDEBAR_MAX_WIDTH}
-        aria-valuenow={sidebarWidth}
-        tabIndex={0}
-        onPointerDown={startSidebarResize}
-        onPointerMove={moveSidebarResize}
-        onPointerUp={finishSidebarResize}
-        onPointerCancel={finishSidebarResize}
-        onKeyDown={resizeSidebarWithKeyboard}
-      />
-      {selected ? <LineConversationPanel auth={auth} initial={selected} readOnly={mode === "log" || TERMINAL_SESSION_STATUSES.includes(selected.status)} onBack={() => setSelected(null)} onChanged={updateSelectedConversation}/> : <section className="line-conversation-placeholder"><div>R<span>+</span></div><h2>{t(mode === "current" ? "대화를 선택하세요" : "상담 기록을 선택하세요")}</h2><p>{t(mode === "current" ? "왼쪽 목록에서 Guest 문의를 열면 상담이 시작됩니다." : "모든 Agent의 종료 상담을 읽기 전용으로 확인할 수 있습니다.")}</p></section>}
-      {notice && <AgentNoticePopup notice={notice} onClose={() => setNotice(null)} onAction={showWaitingList}/>}
-      {showPasswordChange && <PasswordChangeModal auth={auth} onClose={() => setShowPasswordChange(false)}/>}
+        className={`line-agent-workspace ${selected ? "has-selection" : ""}`}
+        style={{
+          gridTemplateColumns: `${sidebarWidth}px 8px minmax(0, 1fr)`,
+        }}
+      >
+        <aside className="line-agent-list">
+          {/* 공통 사용자 메뉴를 제거해 상담 탭부터 목록 영역이 바로 시작됩니다. */}
+          <div className="line-inbox-tabs">
+            <button className={mode === "current" ? "active" : ""} onClick={() => { setMode("current"); setSelected(null); }}>{t("Current chat room")} <em>{currentSessions.length}</em></button>
+            <button className={mode === "log" ? "active" : ""} onClick={() => { setMode("log"); setSelected(null); }}>{t("Log")} <em>{logSessions.length}</em></button>
+          </div>
+          <label className="line-search"><span>⌕</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("대화방, 메시지 검색")}/></label>
+          <div className="line-filters">
+            <select value={hotelFilter} onChange={(event) => setHotelFilter(event.target.value)} aria-label={t("호텔 필터")}><option value="">{t("전체 호텔")}</option>{hotels.map((hotel) => <option key={hotel}>{hotel}</option>)}</select>
+            <select value={languageFilter} onChange={(event) => setLanguageFilter(event.target.value)} aria-label={t("언어 필터")}><option value="">{t("전체 언어")}</option>{languages.map((language) => <option key={language} value={language}>{language.toUpperCase()}</option>)}</select>
+            <button onClick={() => void refresh()} aria-label={t("새로고침")}>↻</button>
+          </div>
+          {error && <div className="error-box line-inbox-error">{error}</div>}
+          <div className="line-conversation-list">
+            {visibleSessions.length === 0 && <div className="line-empty"><span>{mode === "current" ? "✓" : "⌁"}</span><strong>{t(mode === "current" ? "현재 상담이 없습니다." : "조건에 맞는 기록이 없습니다.")}</strong></div>}
+            {visibleSessions.map((session) => (
+              <button key={session.id} className={`line-conversation-item ${selected?.id === session.id ? "selected" : ""}`} onClick={() => void choose(session)}>
+                <span className="line-room-avatar">{session.room.roomNumber.slice(-2)}</span>
+                <span><strong>{session.room.hotel.name} · {session.room.roomNumber}{t("호")}</strong><small>{session.lastMessage?.content ?? t(session.status === "WAITING" ? "새 문의가 도착했습니다." : session.status)}</small><em>{session.language.toUpperCase()} · {t("담당 상담원")}: {session.agent?.name ?? t("담당자 없음")}</em></span>
+                <time>{new Date(session.lastMessage?.createdAt ?? session.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</time>
+              </button>
+            ))}
+          </div>
+        </aside>
+        <div
+          className="line-sidebar-resizer"
+          role="separator"
+          aria-label={t("목록과 대화창 너비 조절")}
+          aria-orientation="vertical"
+          aria-valuemin={AGENT_SIDEBAR_MIN_WIDTH}
+          aria-valuemax={AGENT_SIDEBAR_MAX_WIDTH}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          onPointerDown={startSidebarResize}
+          onPointerMove={moveSidebarResize}
+          onPointerUp={finishSidebarResize}
+          onPointerCancel={finishSidebarResize}
+          onKeyDown={resizeSidebarWithKeyboard}
+        />
+        {selected ? <LineConversationPanel auth={auth} initial={selected} readOnly={isAdminView || mode === "log" || TERMINAL_SESSION_STATUSES.includes(selected.status)} adminReadOnly={isAdminView} onBack={() => setSelected(null)} onChanged={updateSelectedConversation}/> : <section className="line-conversation-placeholder"><h2>{t(mode === "current" ? "대화를 선택하세요" : "상담 기록을 선택하세요")}</h2><p>{t(isAdminView ? "관리자는 전체 상담을 읽기 전용으로 조회할 수 있습니다." : mode === "current" ? "왼쪽 목록에서 Guest 문의를 열면 상담이 시작됩니다." : "모든 Agent의 종료 상담을 읽기 전용으로 확인할 수 있습니다.")}</p></section>}
+        {notice && <AgentNoticePopup notice={notice} onClose={() => setNotice(null)} onAction={showWaitingList}/>}
+        {showPasswordChange && <PasswordChangeModal auth={auth} onClose={() => setShowPasswordChange(false)}/>}
+      </div>
     </div>
   );
 }
@@ -1812,11 +1896,12 @@ function RoomQrModal({
 /** 관리자 화면은 Agent·호텔·룸 CRUD, 고객 주소와 객실별 고정 QR 관리를 제공합니다. */
 function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const { language, t } = useI18n();
+  const navigate = useNavigate();
   const [agents, setAgents] = useState<AdminAgentView[]>([]);
   const [hotels, setHotels] = useState<HotelView[]>([]);
   const [rooms, setRooms] = useState<RoomView[]>([]);
-  const [sessions, setSessions] = useState<SessionView[]>([]);
-  const [filter, setFilter] = useState("");
+  // null은 API에 hotelId를 보내지 않는 "접근 가능한 전체 호텔"이며 실제 호텔 ID와 겹치지 않습니다.
+  const [selectedHotelId, setSelectedHotelId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [agentForm, setAgentForm] = useState({
     name: "",
@@ -1830,13 +1915,12 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const [roomError, setRoomError] = useState("");
   const [qrRoom, setQrRoom] = useState<RoomView | null>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
-  const [selectedLog, setSelectedLog] = useState<SessionView | null>(null);
   const [welcomeLanguage, setWelcomeLanguage] = useState<"ja" | "en">("ja");
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [welcomeError, setWelcomeError] = useState("");
   const [welcomeSaved, setWelcomeSaved] = useState("");
   const [activeAdminSection, setActiveAdminSection] = useState<
-    "hotels" | "agents" | "logs"
+    "hotels" | "agents"
   >("hotels");
   const [adminMenuCollapsed, setAdminMenuCollapsed] = useState(
     () => window.localStorage.getItem("remoteplus-admin-menu-collapsed") === "true",
@@ -1856,16 +1940,15 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
 
   async function refresh() {
     try {
-      const [a, h, r, s] = await Promise.all([
+      const [a, h, r] = await Promise.all([
         listAdminAgents(auth.accessToken),
         listHotels(auth.accessToken),
-        listRooms(auth.accessToken, filter || undefined),
-        listSessions(auth.accessToken),
+        // 전체 호텔은 undefined로 호출해 "all" 같은 가짜 ID가 서버에 전달되지 않게 합니다.
+        listRooms(auth.accessToken, selectedHotelId ?? undefined),
       ]);
       setAgents(a);
       setHotels(h);
       setRooms(r);
-      setSessions(s);
       setRoomHotelId((current) =>
         h.some((hotel) => hotel.id === current) ? current : (h[0]?.id ?? ""),
       );
@@ -1880,7 +1963,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   }
   useEffect(() => {
     void refresh();
-  }, [filter]);
+  }, [selectedHotelId]);
   useEffect(() => {
     const hotel = hotels.find((item) => item.id === roomHotelId);
     setWelcomeMessage(hotel ? (welcomeLanguage === "en" ? hotel.welcomeMessageEn : hotel.welcomeMessage) : "");
@@ -1958,7 +2041,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     if (!window.confirm(message)) return;
     try {
       await deleteHotel(auth.accessToken, hotel.id);
-      if (filter === hotel.id) setFilter("");
+      if (selectedHotelId === hotel.id) setSelectedHotelId(null);
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "호텔 삭제 실패");
@@ -1985,9 +2068,17 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   return (
     <div className="admin-shell">
       <header>
-        <div>
-          <div className="brand dark">
-            REMOTE<span>+</span>
+        <div className="admin-heading">
+          <div className="admin-brand-row">
+            <div className="brand dark">
+              REMOTE<span>+</span>
+            </div>
+            <button
+              className="secondary admin-agent-link"
+              onClick={() => navigate(ADMIN_AGENT_WORKSPACE_PATH)}
+            >
+              {t("Agent 페이지")}
+            </button>
           </div>
           <h1>{t("관리자 페이지")}</h1>
         </div>
@@ -2051,19 +2142,6 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
                 <small>{t("직원 계정과 상태")}</small>
               </span>
               <em>{agents.length}</em>
-            </button>
-            <button
-              type="button"
-              className={activeAdminSection === "logs" ? "active" : ""}
-              aria-current={activeAdminSection === "logs" ? "page" : undefined}
-              onClick={() => setActiveAdminSection("logs")}
-            >
-              <span className="admin-nav-icon" aria-hidden="true">L</span>
-              <span className="admin-nav-copy">
-                <strong>{t("상담 로그")}</strong>
-                <small>{t("종료 상담 기록")}</small>
-              </span>
-              <em>{filterConversationLogs(sessions, "").length}</em>
             </button>
           </nav>
         </aside>
@@ -2155,7 +2233,28 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           <button disabled={!hotelName.trim()}>+ {t("호텔 추가")}</button>
         </form>
         <div className="hotel-chip-list">
-          {hotels.map((hotel) => <button type="button" key={hotel.id} className={roomHotelId === hotel.id ? "active" : ""} onClick={() => { setRoomHotelId(hotel.id); setFilter(hotel.id); }}><span>{hotel.name.slice(0, 1)}</span>{hotel.name}</button>)}
+          <button
+            type="button"
+            className={selectedHotelId === null ? "active" : ""}
+            onClick={() => setSelectedHotelId(null)}
+          >
+            <span aria-hidden="true">∞</span>
+            {t("전체 호텔")}
+          </button>
+          {hotels.map((hotel) => (
+            <button
+              type="button"
+              key={hotel.id}
+              className={selectedHotelId === hotel.id ? "active" : ""}
+              onClick={() => {
+                setSelectedHotelId(hotel.id);
+                setRoomHotelId(hotel.id);
+              }}
+            >
+              <span>{hotel.name.slice(0, 1)}</span>
+              {hotel.name}
+            </button>
+          ))}
         </div>
         {roomError && (
           <div className="error-box form-error" role="alert">
@@ -2193,17 +2292,6 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
             {t("선택 호텔 삭제")}
           </button>
         </form>
-        <label className="filter">
-          {t("호텔 필터")}
-          <select value={filter} onChange={(e) => setFilter(e.target.value)}>
-            <option value="">{t("전체 호텔")}</option>
-            {hotels.map((hotel) => (
-              <option key={hotel.id} value={hotel.id}>
-                {hotel.name}
-              </option>
-            ))}
-          </select>
-        </label>
         <div className="table-wrap admin-table">
           <table>
             <thead>
@@ -2292,25 +2380,9 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       </section>
       </>
       )}
-      {activeAdminSection === "logs" && (
-        <section className="card admin-log-panel">
-          <div className="admin-panel-title">
-            <div><span className="section-eyebrow">CONVERSATIONS</span><h2>{t("상담 로그")}</h2><p>{t("종료된 상담을 호텔별로 찾아 전체 대화를 확인합니다.")}</p></div>
-            <strong>{filterConversationLogs(sessions, "").length}</strong>
-          </div>
-          <ConversationLogBlock sessions={sessions} onOpen={setSelectedLog} embedded />
-        </section>
-      )}
         </div>
       </div>
       {qrRoom && <RoomQrModal room={qrRoom} onClose={() => setQrRoom(null)} />}
-      {selectedLog && (
-        <ConversationLogModal
-          auth={auth}
-          session={selectedLog}
-          onClose={() => setSelectedLog(null)}
-        />
-      )}
       {showPasswordChange && (
         <PasswordChangeModal
           auth={auth}
@@ -2409,9 +2481,10 @@ function App(): React.JSX.Element {
       <Route path="/" element={loginElement} />
       <Route path="/login" element={loginElement} />
       <Route
-        path="/agent"
+        path={AGENT_WORKSPACE_PATH}
         element={
-          staffAuth?.agent.role === "AGENT" ? (
+          staffAuth &&
+          canAccessStaffPath(staffAuth.agent.role, AGENT_WORKSPACE_PATH) ? (
             <LineAgentPage auth={staffAuth} />
           ) : (
             <Navigate to="/login" replace />
@@ -2419,10 +2492,25 @@ function App(): React.JSX.Element {
         }
       />
       <Route
-        path="/admin"
+        path={ADMIN_DASHBOARD_PATH}
         element={
-          staffAuth?.agent.role === "ADMIN" ? (
+          staffAuth &&
+          canAccessStaffPath(staffAuth.agent.role, ADMIN_DASHBOARD_PATH) ? (
             <AdminPage auth={staffAuth} />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      />
+      <Route
+        path={ADMIN_AGENT_WORKSPACE_PATH}
+        element={
+          staffAuth &&
+          canAccessStaffPath(
+            staffAuth.agent.role,
+            ADMIN_AGENT_WORKSPACE_PATH,
+          ) ? (
+            <LineAgentPage auth={staffAuth} />
           ) : (
             <Navigate to="/login" replace />
           )

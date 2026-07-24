@@ -1,5 +1,111 @@
 # 프로젝트 변경 이력
 
+## 2026-07-24 12:55:13 +09:00
+
+### 수정한 파일
+
+- 로그인·권한 경로: `apps/agent-web/src/staff-routing.ts`, `staff-routing.test.ts`
+- Agent/Admin 화면: `apps/agent-web/src/main.tsx`, `styles.css`, `i18n.tsx`
+- UI 회귀 테스트: `apps/agent-web/src/dashboard-layout.test.ts`
+- 문서: `README.md`, `docs/00_Base_Specification.md`, `docs/03_User_Flows.md`, `docs/07_UI_Structure.md`, `docs/08_System_Blueprint.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- ADMIN 로그인 직후와 저장 인증 복구 경로를 Dashboard(`/admin`)에서 ADMIN Agent 전체 조회(`/admin/agent`)로 변경했다. Dashboard와 Agent 화면의 버튼은 기존 명시적 route를 그대로 사용한다.
+- ChatSession의 기존 `agentId`와 공개 `agent { id, name }` 응답을 목록·상세 헤더에 표시하고 미배정이면 `담당자 없음 / 担当者なし`으로 표시한다. 부모 직원 Socket이 `chat:session-updated`, `chat:session-closed`를 받아 목록과 선택 상세를 함께 갱신한다.
+- 상세 헤더를 호텔·객실·상태·담당자 왼쪽 정보와 `남은 시간 → 상담 종료` 오른쪽 action 그룹으로 나누고 자동 여백으로 오른쪽 정렬했다. ADMIN 읽기 전용 화면은 종료 버튼을 만들지 않는다.
+- Dashboard의 상담 Log 메뉴·상태·데이터 요청·패널·모달을 제거했다. Agent 화면의 `Log` 탭, 기록 API와 저장 로직은 유지했다.
+- Agent Current/Log 공용 미선택 화면에서 직접 렌더링하던 초록색 R 로고와 전용 CSS를 제거했다.
+- Admin의 별도 호텔 필터 select를 제거하고 버튼 목록 첫 항목에 `전체 호텔`을 추가했다. `selectedHotelId=null`이면 `listRooms`에 hotelId를 보내지 않고 실제 ID를 선택했을 때만 쿼리를 전달한다.
+- DB 스키마는 변경하지 않았다. `ChatSession.agentId → Agent` 관계와 기본 사양서의 ER 시각화는 그대로 유효하며 이번 변경은 기존 공개 담당자 응답을 UI에서 소비한다.
+
+### 확인 방법
+
+- `pnpm lint`를 실행해 shared·Agent·Guest·Server 전체 TypeScript 검사를 통과했다.
+- `pnpm test`를 실행해 Agent 81개, Guest 18개, Server 56개 테스트를 모두 통과했다.
+- `pnpm build`를 실행해 전체 애플리케이션의 프로덕션 빌드를 통과했다.
+- Docker에 새 Agent 이미지를 반영한 뒤 ADMIN 로그인·인증 복구가 `/admin/agent`로 이동하고 Dashboard를 왕복해도 권한이 유지되는지 확인했다.
+- Dashboard에서 상담 Log가 사라지고 `전체 호텔`과 개별 호텔 버튼이 실제 룸 목록을 정상 필터링하며 별도 호텔 필터가 없는지 확인했다.
+- Guest 상담을 새로 생성해 미배정 표시를 확인하고, Agent가 수락하자 ADMIN 목록과 선택 헤더의 담당자가 새로고침 없이 `김상담`으로 갱신되는지 확인했다.
+- Agent 첫 답변 후 `15:00` 타이머가 시작되고 헤더에 `남은 시간 → 상담 종료` 순서로 표시되며, ADMIN 읽기 전용 화면에는 종료 버튼이 없는지 확인했다.
+- Agent Log 탭은 유지되고 미선택 화면의 초록색 R 로고가 DOM에 없으며, 일반 Agent가 `/admin`에 접근하면 `/agent`로 되돌아가는지 확인했다.
+
+## 2026-07-24 12:32:38 +09:00
+
+### 수정한 파일
+
+- Agent 상단 메뉴 DOM과 레이아웃: `apps/agent-web/src/main.tsx`, `styles.css`
+- Agent 메뉴 순서 회귀 테스트: `apps/agent-web/src/dashboard-layout.test.ts`
+- 문서: `README.md`, `docs/07_UI_Structure.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- Agent 상단 오른쪽 메뉴 순서를 `프로필 아이콘 → 직원 이름 → UI 언어 → 알림음 → 브라우저 알림 → 비밀번호 변경 → 로그아웃`으로 변경했다.
+- CSS의 시각적 순서 변경에 의존하지 않고 DOM도 같은 순서로 구성했다. 기존 언어 변경, 알림음, 브라우저 알림, 비밀번호 변경, 로그아웃 이벤트는 그대로 재사용했다.
+- 데스크톱 오른쪽 메뉴는 한 줄과 우측 정렬을 유지하고, 좁은 화면에서는 기존 반응형 아이콘 축약과 행 분리를 사용해 화면 밖으로 넘치지 않게 했다.
+- 데스크톱에서 `UI 언어` 라벨이 글자 단위로 꺾이지 않도록 언어 선택 그룹의 축소와 내부 줄바꿈을 막았다.
+- 사이드바는 계속 `Current chat room / Log → 검색 → 호텔·언어 필터 → 상담 목록`만 표시한다.
+- Guest의 Agent 연결 보안 안내문과 우측 연결 상태 UI가 생성되지 않는 기존 로직을 재검증했다. 내부 WebSocket 상태 갱신과 메시지 입력 활성화는 유지한다.
+
+### 확인 방법
+
+- `dashboard-layout.test.ts`에 프로필·이름부터 로그아웃까지 실제 DOM 순서를 검증하는 조건을 반영했다.
+- Guest 연결 안내 회귀 테스트는 일본어 안내 문구 미렌더링, WebSocket 상태 처리 유지, 우측 상태 배지 미렌더링을 계속 확인한다.
+- `pnpm lint`, `pnpm test`(서버 56개·Agent 75개·Guest 18개), `pnpm build`를 모두 통과했다.
+- Docker Agent 이미지를 다시 빌드하고 실제 1280px 화면에서 `REMOTE+ / 프로필·이름 / UI 언어 / 알림음 / 브라우저 알림 / 비밀번호 변경 / 로그아웃` 순서와 한 줄 배치를 확인했다.
+- 실제 화면에서 한국어↔일본어 전환, 알림음 켜기·끄기, 비밀번호 변경 모달, 로그아웃을 확인했다. 브라우저 알림은 현재 브라우저 권한이 차단된 환경이므로 차단 상태 표시와 관련 단위 테스트로 확인했다.
+
+## 2026-07-24 12:09:16 +09:00
+
+### 수정한 파일
+
+- 직원 경로·권한: `apps/agent-web/src/staff-routing.ts`, `staff-routing.test.ts`
+- 관리자 Dashboard·Agent 조회 UI: `apps/agent-web/src/main.tsx`, `styles.css`, `i18n.tsx`
+- Agent 회귀 테스트: `apps/agent-web/src/dashboard-layout.test.ts`, `conversation-logs.test.ts`
+- 서버 ADMIN 전체 조회 테스트: `apps/server/tests/chat-session-list.spec.ts`
+- Guest 연결 상태 UI: `apps/guest-web/src/main.tsx`, `styles.css`, `agent-connection-notice.test.ts`
+- 문서: `README.md`, `docs/03_User_Flows.md`, `docs/07_UI_Structure.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- ADMIN Dashboard 로고 바로 오른쪽에 `Agent 페이지` 버튼을 추가하고 명확한 `/admin/agent` 경로로 이동하도록 했다.
+- ADMIN Agent 조회 화면의 로고 오른쪽에는 `관리자 페이지` 버튼을 추가해 `/admin`으로 직접 돌아가게 했다. 브라우저 방문 기록을 사용하지 않아 직접 진입 후에도 양방향 이동할 수 있다.
+- 같은 `sessionStorage` ADMIN 인증을 유지하면서 모든 대기·진행 상담과 전체 로그를 읽기 전용으로 조회하게 했다. 상담 배정·메시지 전송·종료는 일반 Agent 역할에만 남겼다.
+- AGENT는 `/agent`만, ADMIN은 `/admin`과 `/admin/agent`만 접근하도록 경로 권한을 중앙 함수로 분리했다. 일반 Agent에는 관리자 이동 버튼을 렌더링하지 않는다.
+- Guest 채팅 헤더 우측의 연결 상태 문구와 표시를 제거했다. Socket.IO 상태 처리, 재연결, 메시지 송수신과 입력 활성화 로직은 유지했다.
+
+### 확인 방법
+
+- `pnpm lint`, `pnpm test`(서버 56개·Agent 75개·Guest 18개), `pnpm build`를 모두 통과했다.
+- 경로 권한, 버튼 DOM 순서, 브라우저 history 비의존 이동, ADMIN 읽기 전용 전체 조회와 Guest 헤더 연결 상태 미표시를 자동 테스트에 포함했다.
+- Docker 이미지를 다시 빌드한 뒤 ADMIN으로 `/admin → /admin/agent → /admin`을 이동하고 `/admin/agent` 직접 진입 시 인증이 유지되는지 확인했다. 일반 Agent로 두 관리자 경로를 직접 열면 `/agent`로 차단되는 것도 확인했다.
+- Guest 상담을 실제 시작해 헤더에 호텔·객실만 남고 연결 상태 문구가 없는지 확인했다. QA 상담은 확인 후 종료했다.
+
+## 2026-07-24 11:37:28 +09:00
+
+### 수정한 파일
+
+- Agent 상단 메뉴와 사이드바: `apps/agent-web/src/main.tsx`, `styles.css`
+- Guest 연결 안내: `apps/guest-web/src/main.tsx`
+- 회귀 테스트: `apps/agent-web/src/dashboard-layout.test.ts`, `apps/guest-web/src/agent-connection-notice.test.ts`
+- 문서: `docs/07_UI_Structure.md`, `docs/11_User_Manual.md`, `docs/12_Feature_Status.md`
+
+### 수정 내용과 이유
+
+- Agent 사이드바에 있던 로고, 언어 선택, 알림음, 브라우저 알림, 비밀번호 변경, 로그아웃, 계정 정보를 전체 너비 상단 메뉴바로 옮겼다.
+- 상단 오른쪽 메뉴의 DOM 순서를 `UI 언어 → 알림음 → 브라우저 알림 → 비밀번호 변경 → 로그아웃 → 프로필 아이콘 → 상담원 이름`으로 고정하고 프로필 그룹이 마지막에 오도록 했다.
+- 사이드바는 `Current chat room / Log` 탭부터 시작하며 검색, 호텔·언어 필터, 상담 목록만 포함하도록 정리했다.
+- Guest가 `ACTIVE`로 전환될 때 표시하던 상담원 연결 보안 안내문 렌더링을 제거했다. WebSocket 상태 갱신, 연결 표시, 입력 활성화, 첫 Agent 메시지 기준 타이머는 유지했다.
+- 작은 화면에서는 상단 메뉴가 영역 밖으로 넘치지 않고 같은 상단 영역 안에서 줄바꿈되도록 반응형 규칙을 추가했다.
+
+### 확인 방법
+
+- `pnpm lint`, `pnpm test`(서버 55개·Agent 69개·Guest 17개), `pnpm build`, `git diff --check`를 모두 통과했다.
+- 1440px 화면에서 상단 메뉴가 전체 1440px을 사용하고 프로필 오른쪽 여백이 16px이며, 오른쪽 메뉴의 마지막 DOM 요소가 계정 그룹인지 확인했다.
+- 390px 화면에서 설정 버튼을 34px 아이콘으로 축약한 뒤 상단 높이가 87px이고 가로 오버플로가 없으며 프로필 그룹이 계속 마지막인지 확인했다.
+- UI 언어 변경, 알림음 켜기·끄기, 비밀번호 변경 모달 열기·닫기, 로그아웃을 실제 브라우저에서 확인했다. 브라우저 알림은 현재 권한이 차단된 환경에서 차단 상태 버튼이 유지됐고 관련 단위 테스트가 통과했다.
+- Agent가 Guest 상담을 연 뒤 일본어 연결 안내문이 0건이고 Guest 입력이 활성 상태인지 확인했다. Guest 메시지가 Agent에 실시간 도착했으며 양쪽 브라우저 콘솔 오류는 없었다.
+
 ## 2026-07-24 10:51:57 +09:00
 
 ### 작업 기준

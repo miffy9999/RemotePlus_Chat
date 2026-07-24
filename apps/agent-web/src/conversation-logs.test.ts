@@ -50,8 +50,9 @@ describe("공동 상담 로그 필터", () => {
   it("Agent Log 상세를 읽기 전용 LINE 본문으로 연다", () => {
     expect(mainSource).toContain('setMode("log")');
     expect(mainSource).toContain(
-      'readOnly={mode === "log" || TERMINAL_SESSION_STATUSES.includes(selected.status)}',
+      'readOnly={isAdminView || mode === "log" || TERMINAL_SESSION_STATUSES.includes(selected.status)}',
     );
+    expect(mainSource).toContain("adminReadOnly={isAdminView}");
     expect(mainSource).toContain("종료된 상담 기록입니다");
   });
 
