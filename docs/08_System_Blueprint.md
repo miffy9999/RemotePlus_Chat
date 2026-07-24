@@ -167,12 +167,13 @@ flowchart TD
     Role -->|ADMIN| AdminPage["관리자 페이지"]
     StaffToken --> List["GET /agent/chat-sessions"]
     List --> Open["POST /agent/chat-sessions/:id/open"]
-    Open --> Active["ACTIVE + agentId + startedAt + expiresAt(+15분)"]
-    Active --> Close["POST /chat-sessions/:id/close"]
+    Open --> Active["ACTIVE + agentId<br/>startedAt·expiresAt = null"]
+    Active --> FirstReply["첫 Agent 메시지 저장<br/>startedAt + expiresAt(+15분)"]
+    FirstReply --> Close["POST /chat-sessions/:id/close"]
     Close --> Closed["CLOSED + closedAt + closeReason"]
 ```
 
-대화 열기는 `status=WAITING`과 `agentId=null`을 조건으로 한 번에 갱신한다. 두 Agent가 동시에 열어도 한 요청만 담당자가 되며 이 원자 갱신 시점부터 15분을 계산한다.
+대화 열기는 `status=WAITING`과 `agentId=null`을 조건으로 한 번에 갱신한다. 두 Agent가 동시에 열어도 한 요청만 담당자가 되며, 이때 `startedAt`과 `expiresAt`은 아직 `null`이다. 담당 Agent의 첫 메시지를 저장하는 트랜잭션이 `expiresAt IS NULL` 조건으로 `startedAt=현재`, `expiresAt=현재+15분`을 한 번만 기록한다.
 
 ## 10. Phase 2 실시간 처리 구조
 
@@ -210,8 +211,9 @@ sequenceDiagram
 flowchart LR
     Link["투숙객 accessKey 링크"] --> Consent["언어 선택·이용 동의"]
     Consent --> Waiting["WAITING 채팅·문의 즉시 저장"]
-    Waiting -->|Agent 대화 열기| Active["ACTIVE 채팅·15분 시작"]
-    Active -->|Socket.IO 메시지| Agent["Agent 채팅 화면"]
+    Waiting -->|Agent 대화 열기| Active["ACTIVE 채팅·담당자 배정"]
+    Active -->|첫 Agent 메시지 저장| ActiveTimed["ACTIVE 채팅·15분 시작"]
+    ActiveTimed -->|Socket.IO 메시지| Agent["Agent 채팅 화면"]
     Agent -->|종료 확인| Closed["CLOSED 읽기 전용 화면"]
     Closed --> History["Agent 종료 상담 기록"]
 ```

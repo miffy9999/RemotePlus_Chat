@@ -106,7 +106,7 @@ export function acceptSession(token: string, sessionId: string) {
   return request<SessionView>(`/agent/chat-sessions/${sessionId}/accept`, { method: "POST", headers: { authorization: `Bearer ${token}` } });
 }
 
-/** 새 문의를 별도 수락 단계 없이 열고 첫 Agent에게 원자 배정하며 이 시점부터 15분을 시작합니다. */
+/** 새 문의를 별도 수락 단계 없이 열고 첫 Agent에게 원자 배정합니다. 15분은 첫 Agent 메시지를 저장할 때 시작합니다. */
 export function openSession(token: string, sessionId: string) {
   return request<SessionView>(`/agent/chat-sessions/${sessionId}/open`, { method: "POST", headers: { authorization: `Bearer ${token}` } });
 }

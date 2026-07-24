@@ -34,6 +34,24 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
     expect(styles).toContain(".line-agent-account {");
   });
 
+  /** 사이드바 폭을 조절해도 운영 버튼이 임의로 한 줄이나 세 줄이 되지 않아야 합니다. */
+  it("Agent 운영 버튼 4개를 2열 2행의 고정 그룹으로 배치한다", () => {
+    expect(mainSource).toContain('className="line-agent-controls"');
+    expect(mainSource).toContain("notificationButtonLabel");
+    expect(mainSource).toContain('onClick={() => setShowPasswordChange(true)}');
+    expect(mainSource).toContain("onClick={logout}");
+    expect(styles).toMatch(
+      /\.line-agent-controls\s*\{[^}]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\);[^}]*grid-template-rows:\s*repeat\(2,auto\);/,
+    );
+  });
+
+  /** 대화방을 연 것만으로 시간을 차감하지 않고 첫 답변 전 입력과 안내 문구를 유지해야 합니다. */
+  it("첫 Agent 답변 전에는 만료시각 없이 입력할 수 있고 서버 갱신 이벤트로 타이머를 시작한다", () => {
+    expect(mainSource).toContain('socket.on("chat:session-updated"');
+    expect(mainSource).toContain('session.expiresAt === null ||');
+    expect(mainSource).toContain('t("첫 답변 후 15분")');
+  });
+
   /** 호텔·Agent·로그를 긴 단일 페이지로 다시 합치는 회귀를 막습니다. */
   it("관리 메뉴와 선택 패널을 가진 대시보드 구조를 제공한다", () => {
     expect(mainSource).toContain('className="admin-navigation"');

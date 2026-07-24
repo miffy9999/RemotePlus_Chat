@@ -26,7 +26,7 @@
 ## 2026-07-19 Phase 1 세션 시간 결정
 
 - 2026-07-23부터 `ChatSession.createdAt`은 고객의 대기 시작 시각으로만 사용하고 상담 제한 시간에는 포함하지 않는다.
-- WAITING의 `expiresAt`은 `null`이며, Agent 수락 트랜잭션에서 `startedAt`과 `expiresAt = startedAt + 15분`을 함께 기록한다.
+- WAITING과 담당자 배정 직후의 `expiresAt`은 `null`이며, 담당 Agent의 첫 메시지 저장 트랜잭션에서 `startedAt`과 `expiresAt = startedAt + 15분`을 함께 기록한다.
 - 고객은 전용 종료 API와 확인 창으로 WAITING·ACTIVE 상담을 종료할 수 있다. 단순 탭 닫기나 WebSocket 단절은 모바일 망 전환·새로고침과 구분할 수 없어 종료로 처리하지 않는다.
 - 동일 룸에는 `WAITING` 또는 `ACTIVE` 상담을 동시에 하나만 허용한다.
 - 투숙객 접근 키 검증 JWT는 상담 생성에만 사용하고, 생성 후에는 DB에 해시로 저장한 별도 불투명 토큰으로 상담을 조회한다.
@@ -150,7 +150,7 @@
 ## 2026-07-23 Guest 선문의·호텔 다국어 안내문·LINE형 Agent UI 결정
 
 - `WAITING`은 `expiresAt=null`로 저장해 대기 시간만으로 삭제·만료하지 않고 Guest 메시지를 즉시 DB에 저장한다.
-- Agent가 새 문의를 처음 열 때 담당자, `startedAt`, `expiresAt=현재+15분`을 한 조건부 갱신으로 기록한다. 기존 `/accept`는 순차 배포 호환을 위해 같은 정책으로 유지한다.
+- Agent가 새 문의를 처음 열 때는 담당자만 조건부 갱신으로 기록한다. 담당 Agent의 첫 메시지를 저장할 때 `expiresAt IS NULL` 조건으로 `startedAt`, `expiresAt=현재+15분`을 원자 기록하며, 동시 전송에서도 한 번만 타이머를 시작한다.
 - 호텔은 일본어 기본 원문 `welcomeMessage`와 영어 원문 `welcomeMessageEn`을 가지며 신규 상담 생성 트랜잭션의 첫 SYSTEM 메시지로 복사한다.
 - Agent 화면은 LINE형 Current/Log 2열 구조와 한국어·일본어 UI를 사용하고 다른 Agent의 ACTIVE는 서버 목록부터 차단한다.
 - 관리자 화면은 호텔·룸 관리, 호텔별 자동 안내문, Agent 관리 순서의 대시보드로 표시한다. 기존 고정 QR·비밀번호 변경·알림·30일 로그 기능은 유지한다.

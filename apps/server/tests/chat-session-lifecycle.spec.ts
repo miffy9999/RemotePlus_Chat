@@ -4,7 +4,7 @@ import { sha256 } from "../src/common/security/hash";
 const room = { id: "room-id", roomNumber: "101", hotel: { id: "hotel-id", name: "테스트 호텔" } };
 
 describe("상담 수락·고객 종료 수명주기", () => {
-  it("Agent가 수락한 시각부터 정확히 15분 뒤로 만료 시각을 설정한다", async () => {
+  it("Agent가 대화를 열면 담당자만 배정하고 첫 답변 전에는 타이머를 시작하지 않는다", async () => {
     const waiting = { id: "session-id", roomId: room.id, status: "WAITING", agentId: null, guestTokenHash: "hash", expiresAt: null, room, agent: null };
     const updateMany = jest.fn().mockResolvedValue({ count: 1 });
     const findUnique = jest.fn().mockResolvedValueOnce(waiting).mockImplementation(async () => {
@@ -14,15 +14,14 @@ describe("상담 수락·고객 종료 수명주기", () => {
     const emit = jest.fn();
     const service = new ChatSessionsService({ chatSession: { findUnique, updateMany } } as never, { emit } as never);
 
-    const before = Date.now();
     const result = await service.accept("session-id", { sub: "agent-id", role: "AGENT", kind: "staff", tokenVersion: 0 });
-    const after = Date.now();
     const data = updateMany.mock.calls[0][0].data;
 
-    expect(data.startedAt.getTime()).toBeGreaterThanOrEqual(before);
-    expect(data.startedAt.getTime()).toBeLessThanOrEqual(after);
-    expect(data.expiresAt.getTime() - data.startedAt.getTime()).toBe(15 * 60 * 1000);
+    expect(data.startedAt).toBeNull();
+    expect(data.expiresAt).toBeNull();
     expect(result.status).toBe("ACTIVE");
+    expect(result.startedAt).toBeNull();
+    expect(result.expiresAt).toBeNull();
     expect(emit).toHaveBeenCalledWith("chat.session.updated", expect.objectContaining({ id: "session-id", status: "ACTIVE" }));
   });
 

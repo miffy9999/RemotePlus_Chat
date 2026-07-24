@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clearStoredGuestAccess, readStoredGuestAccess, saveStoredGuestAccess } from "./guest-access-storage";
+import { clearStoredGuestAccess, isGuestSessionOpen, readStoredGuestAccess, saveStoredGuestAccess } from "./guest-access-storage";
 import type { StoredGuestAccess } from "./api";
 
 /** 실제 브라우저 없이도 항목별 삭제 범위와 손상 복구를 검증하기 위한 메모리 저장소입니다. */
@@ -54,6 +54,33 @@ describe("게스트 상담 기기 저장소", () => {
     const storage = memoryStorage();
     saveStoredGuestAccess("room-a", validAccess, storage);
     expect(readStoredGuestAccess("room-a", storage, new Date("2026-08-22T04:00:01.000Z").getTime())).toEqual(validAccess);
+  });
+
+  it("Agent가 열었지만 첫 답변 전인 ACTIVE 상담도 복구하고 메시지 입력을 허용한다", () => {
+    const activeBeforeReply = {
+      ...validAccess.session,
+      status: "ACTIVE" as const,
+      expiresAt: null,
+    };
+    const storage = memoryStorage();
+    saveStoredGuestAccess(
+      "room-a",
+      { ...validAccess, session: activeBeforeReply },
+      storage,
+    );
+    expect(
+      readStoredGuestAccess(
+        "room-a",
+        storage,
+        new Date("2026-08-22T04:00:01.000Z").getTime(),
+      ),
+    ).toEqual({ ...validAccess, session: activeBeforeReply });
+    expect(
+      isGuestSessionOpen(
+        activeBeforeReply,
+        new Date("2026-08-22T04:00:01.000Z").getTime(),
+      ),
+    ).toBe(true);
   });
 
   it.each(["CLOSED", "EXPIRED"] as const)("%s 상담 정보는 재접속에 사용하지 않고 제거한다", (status) => {

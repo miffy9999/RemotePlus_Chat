@@ -1,5 +1,8 @@
 import { ConflictException, ForbiddenException } from "@nestjs/common";
 
+/** 상담사가 첫 답변을 보낸 시각부터 적용하는 서버 기준 상담 제한시간입니다. */
+export const SESSION_DURATION_MS = 15 * 60 * 1000;
+
 /** 새 WAITING을 열거나 현재 담당자가 자기 ACTIVE 상담을 다시 여는 경우만 허용합니다. */
 export function assertCanOpen(status: string, agentId: string | null, requesterId: string): void {
   if (status === "WAITING" && agentId === null) return;

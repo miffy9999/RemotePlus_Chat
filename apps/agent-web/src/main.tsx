@@ -526,6 +526,12 @@ function LineConversationPanel({
     socket.io.on("reconnect_attempt", () => setConnection("재연결 중"));
     socket.on("chat:message", (message: MessageView) => setMessages((items) => mergeMessage(items, message)));
     socket.on("chat:message-accepted", (message: MessageView) => setMessages((items) => mergeMessage(items, message)));
+    socket.on("chat:session-updated", (updated: SessionView) => {
+      if (updated.id !== session.id) return;
+      // 첫 Agent 메시지 저장과 함께 서버가 확정한 startedAt/expiresAt을 받아 같은 절대 시각으로 카운트다운을 시작합니다.
+      setSession(updated);
+      onChanged(updated);
+    });
     socket.on("chat:session-closed", (updated: SessionView) => {
       if (updated.id === session.id) { setSession(updated); onChanged(updated); }
     });
@@ -553,7 +559,11 @@ function LineConversationPanel({
       setError(reason instanceof Error ? reason.message : t("종료에 실패했습니다."));
     }
   }
-  const writable = !readOnly && session.status === "ACTIVE" && session.expiresAt !== null && new Date(session.expiresAt).getTime() > now;
+  const writable =
+    !readOnly &&
+    session.status === "ACTIVE" &&
+    (session.expiresAt === null ||
+      new Date(session.expiresAt).getTime() > now);
 
   return (
     <section className="line-conversation-panel">
@@ -564,7 +574,13 @@ function LineConversationPanel({
         <div className="line-conversation-actions">
           <span className={`line-connection ${connection === "연결됨" ? "ok" : ""}`}>● {t(connection)}</span>
           {writable && <button className="danger compact" onClick={() => setShowCloseConfirm(true)}>{t("상담 종료")}</button>}
-          {session.status === "ACTIVE" && session.expiresAt && <strong>{remainingTime(session.expiresAt, now)}</strong>}
+          {session.status === "ACTIVE" && (
+            <strong>
+              {session.expiresAt
+                ? remainingTime(session.expiresAt, now)
+                : t("첫 답변 후 15분")}
+            </strong>
+          )}
         </div>
       </header>
       {/* 조건부 배너와 오류를 본문 안에 묶어도 헤더·본문·입력창의 세 행 구조가 변하지 않게 합니다. */}
@@ -877,7 +893,9 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     void refresh();
   }
   const notificationButtonLabel =
-    notificationPermission === "granted"
+    notificationPermission === "unsupported"
+      ? t("브라우저 알림 미지원")
+      : notificationPermission === "granted"
       ? t("브라우저 알림 켜짐")
       : notificationPermission === "denied"
         ? t("브라우저 알림 차단됨")
@@ -892,22 +910,24 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     >
       <aside className="line-agent-list">
         <header className="line-agent-header">
-          <div className="agent-brand">REMOTE<span>+</span></div>
-          <div
-            className="line-agent-account"
-            aria-label={`${t("로그인 계정")}: ${auth.agent.name}`}
-            title={auth.agent.name}
-          >
-            <span aria-hidden="true">{auth.agent.name.slice(0, 1).toUpperCase()}</span>
-            <strong>{auth.agent.name}</strong>
+          <div className="line-agent-header-primary">
+            <div className="agent-brand">REMOTE<span>+</span></div>
+            <div
+              className="line-agent-account"
+              aria-label={`${t("로그인 계정")}: ${auth.agent.name}`}
+              title={auth.agent.name}
+            >
+              <span aria-hidden="true">{auth.agent.name.slice(0, 1).toUpperCase()}</span>
+              <strong>{auth.agent.name}</strong>
+            </div>
+            <LanguageSwitcher/>
           </div>
-          <LanguageSwitcher/>
-          <button className="link-button" aria-pressed={soundEnabled} onClick={toggleNotificationSound}>{t(soundEnabled ? "알림음 끄기" : "알림음 켜기")}</button>
-          {notificationPermission !== "unsupported" && (
+          <div className="line-agent-controls">
+            <button className="link-button" aria-pressed={soundEnabled} onClick={toggleNotificationSound}>{t(soundEnabled ? "알림음 끄기" : "알림음 켜기")}</button>
             <button className="link-button" disabled={notificationPermission !== "default"} onClick={() => void enableBrowserNotifications()}>{notificationButtonLabel}</button>
-          )}
-          <button className="link-button" onClick={() => setShowPasswordChange(true)}>{t("비밀번호 변경")}</button>
-          <button className="link-button" onClick={logout}>{t("로그아웃")}</button>
+            <button className="link-button" onClick={() => setShowPasswordChange(true)}>{t("비밀번호 변경")}</button>
+            <button className="link-button" onClick={logout}>{t("로그아웃")}</button>
+          </div>
         </header>
         <div className="line-inbox-tabs">
           <button className={mode === "current" ? "active" : ""} onClick={() => { setMode("current"); setSelected(null); }}>{t("Current chat room")} <em>{currentSessions.length}</em></button>
