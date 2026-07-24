@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
+import {
+  anchorCountdownDeadline,
+  mergeMessage,
+  remainingTime,
+  scrollChatToLatest,
+} from "./chat-utils";
 
 describe("Agent 채팅 화면 유틸리티", () => {
   /** 승인 이벤트와 방 이벤트가 겹쳐도 같은 메시지는 한 번만 표시해야 합니다. */
@@ -23,6 +28,23 @@ describe("Agent 채팅 화면 유틸리티", () => {
   it("시계 오차로 17분이 계산돼도 15:00을 넘겨 표시하지 않는다", () => {
     const now = Date.parse("2026-07-21T00:00:00.000Z");
     expect(remainingTime("2026-07-21T00:17:00.000Z", now)).toBe("15:00");
+  });
+
+  /** 15분 상한이 매초 다시 적용되면 시계 오차 동안 15:00에 멈추므로 로컬 종료 시각을 한 번 고정합니다. */
+  it("PC 시계가 서버보다 느려도 15:00 다음 초에 14:59로 감소한다", () => {
+    const observedAt = Date.parse("2026-07-21T00:00:00.000Z");
+    const anchored = anchorCountdownDeadline(
+      "2026-07-21T00:17:00.000Z",
+      observedAt,
+    );
+
+    expect(anchored).toBe("2026-07-21T00:15:00.000Z");
+    expect(remainingTime(anchored!, observedAt)).toBe("15:00");
+    expect(remainingTime(anchored!, observedAt + 1_000)).toBe("14:59");
+  });
+
+  it("첫 답변 전에는 카운트다운 종료 시각을 만들지 않는다", () => {
+    expect(anchorCountdownDeadline(null, Date.now())).toBeNull();
   });
   /** 새 메시지는 페이지가 아니라 전달된 채팅 컨테이너의 마지막 위치로만 이동해야 합니다. */
   it("채팅 컨테이너를 마지막 메시지로 스크롤한다", () => {

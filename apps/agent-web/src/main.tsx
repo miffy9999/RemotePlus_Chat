@@ -33,7 +33,12 @@ import {
   SOCKET_URL,
   updateHotelWelcomeMessage,
 } from "./api";
-import { mergeMessage, remainingTime, scrollChatToLatest } from "./chat-utils";
+import {
+  anchorCountdownDeadline,
+  mergeMessage,
+  remainingTime,
+  scrollChatToLatest,
+} from "./chat-utils";
 import { filterAgentSessions } from "./session-filters";
 import { LanguageProvider, LanguageSwitcher, useI18n } from "./i18n";
 import {
@@ -217,6 +222,10 @@ function AgentChat({
   const [connection, setConnection] = useState("연결 중");
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
+  const countdownExpiresAt = useMemo(
+    () => anchorCountdownDeadline(session.expiresAt, Date.now()),
+    [session.expiresAt],
+  );
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
@@ -330,8 +339,8 @@ function AgentChat({
               ● {t(connection)}
             </span>
             <strong>
-              {session.status === "ACTIVE" && session.expiresAt
-                ? remainingTime(session.expiresAt, now)
+              {session.status === "ACTIVE" && countdownExpiresAt
+                ? remainingTime(countdownExpiresAt, now)
                 : t("종료")}
             </strong>
             <button
@@ -513,6 +522,11 @@ function LineConversationPanel({
   );
   const [error, setError] = useState("");
   const [now, setNow] = useState(Date.now());
+  // 서버 만료 시각이 바뀔 때만 로컬 종료 시각을 고정해 매초 15분 상한이 다시 적용되는 정지 현상을 막습니다.
+  const countdownExpiresAt = useMemo(
+    () => anchorCountdownDeadline(session.expiresAt, Date.now()),
+    [session.expiresAt],
+  );
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const socketRef = useRef<Socket | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
@@ -601,8 +615,8 @@ function LineConversationPanel({
         <div className="line-conversation-actions">
           {session.status === "ACTIVE" && (
             <strong aria-label={t("채팅 만료 시간")}>
-              {session.expiresAt
-                ? remainingTime(session.expiresAt, now)
+              {countdownExpiresAt
+                ? remainingTime(countdownExpiresAt, now)
                 : t("첫 답변 후 15분")}
             </strong>
           )}
