@@ -4,6 +4,26 @@ export function mergeMessage<T extends { id: string; createdAt: string }>(items:
 }
 /** 서버 정책상 Agent 상담에 표시할 수 있는 최대 시간은 대화 시작부터 15분입니다. */
 export const AGENT_SESSION_DURATION_SECONDS = 15 * 60;
+const AGENT_SESSION_DURATION_MS = AGENT_SESSION_DURATION_SECONDS * 1000;
+
+/**
+ * 서버 만료 시각을 처음 관찰한 순간의 로컬 카운트다운 종료 시각으로 고정합니다.
+ * PC 시계가 서버보다 느려 계산값이 15분을 넘더라도 로컬 종료 시각을 정확히 15분 뒤로
+ * 한 번만 잡기 때문에 이후 렌더링에서는 15:00, 14:59, 14:58 순서로 계속 감소합니다.
+ */
+export function anchorCountdownDeadline(
+  expiresAt: string | null,
+  observedAt: number,
+): string | null {
+  if (expiresAt === null) return null;
+  const serverDeadline = new Date(expiresAt).getTime();
+  if (!Number.isFinite(serverDeadline)) return null;
+  const remainingMilliseconds = Math.min(
+    AGENT_SESSION_DURATION_MS,
+    Math.max(0, serverDeadline - observedAt),
+  );
+  return new Date(observedAt + remainingMilliseconds).toISOString();
+}
 
 /**
  * 서버 만료 시각까지 남은 시간을 MM:SS로 표시합니다.
