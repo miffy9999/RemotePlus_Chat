@@ -7,3 +7,7 @@ node_modules
 **/*.tsbuildinfo
 coverage
 .codex
+.env.*
+!.env.example
+!.env.vps.example
+backups

@@ -25,6 +25,17 @@ export function serverPort(): number {
   return value;
 }
 
+/**
+ * 리버스 프록시 뒤에서 실제 고객 IP를 복원할 신뢰 홉 수를 반환합니다.
+ * Sakura 운영 구성은 외부에 Caddy 한 단계만 두므로 기본값 1을 사용하고, 직접 연결하는 개발 환경은 0으로 둡니다.
+ */
+export function trustProxyHops(): number {
+  const fallback = process.env.NODE_ENV === "production" ? 1 : 0;
+  const value = Number(process.env.TRUST_PROXY_HOPS ?? fallback);
+  if (!Number.isInteger(value) || value < 0 || value > 10) throw new Error("TRUST_PROXY_HOPS는 0~10 사이의 정수여야 합니다.");
+  return value;
+}
+
 /** 운영 배포가 예시 비밀값이나 누락된 CORS 설정으로 시작되지 않도록 조기에 차단합니다. */
 export function validateRuntimeEnvironment(): void {
   if (process.env.NODE_ENV !== "production") return;
@@ -33,7 +44,8 @@ export function validateRuntimeEnvironment(): void {
   if (secret.length < 32 || secret === "replace-with-a-long-random-secret") throw new Error("JWT_SECRET에 32자 이상의 운영용 임의 값을 설정해야 합니다.");
   const encryptionSecret = process.env.ACCESS_KEY_ENCRYPTION_SECRET ?? "";
   if (encryptionSecret.length < 32 || encryptionSecret === "replace-with-another-long-random-secret") throw new Error("ACCESS_KEY_ENCRYPTION_SECRET에 32자 이상의 운영용 임의 값을 설정해야 합니다.");
-  if (allowedWebOrigins().length === 0) throw new Error("WEB_ORIGINS에 허용할 Vercel 출처를 설정해야 합니다.");
-  if (!process.env.GUEST_PUBLIC_URL) throw new Error("GUEST_PUBLIC_URL에 Guest Vercel 주소를 설정해야 합니다.");
+  if (allowedWebOrigins().length === 0) throw new Error("WEB_ORIGINS에 허용할 웹 출처를 설정해야 합니다.");
+  if (!process.env.GUEST_PUBLIC_URL) throw new Error("GUEST_PUBLIC_URL에 Guest 공개 주소를 설정해야 합니다.");
   serverPort();
+  trustProxyHops();
 }

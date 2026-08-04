@@ -24,4 +24,12 @@ export class RoomsService {
       room: { id: key.room.id, roomNumber: key.room.roomNumber, hotel: { id: key.room.hotel.id, name: key.room.hotel.name } },
     };
   }
+
+  /** 호텔 로고는 공개 상담 목록용 이미지이며 인증값이나 객실 정보를 포함하지 않습니다. */
+  getHotelLogo(hotelId: string) {
+    return this.prisma.hotelLogo.findUnique({
+      where: { hotelId },
+      select: { data: true, contentType: true, updatedAt: true },
+    });
+  }
 }

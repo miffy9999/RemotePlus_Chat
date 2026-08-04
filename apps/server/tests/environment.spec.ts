@@ -1,4 +1,4 @@
-import { allowedWebOrigins, serverPort, validateRuntimeEnvironment } from "../src/common/config/environment";
+import { allowedWebOrigins, serverPort, trustProxyHops, validateRuntimeEnvironment } from "../src/common/config/environment";
 
 describe("운영 환경 설정", () => {
   const original = { ...process.env };
@@ -10,6 +10,7 @@ describe("운영 환경 설정", () => {
     delete process.env.GUEST_WEB_ORIGIN;
     delete process.env.PORT;
     delete process.env.SERVER_PORT;
+    delete process.env.TRUST_PROXY_HOPS;
   });
 
   afterAll(() => {
@@ -26,6 +27,18 @@ describe("운영 환경 설정", () => {
     process.env.PORT = "10000";
     process.env.SERVER_PORT = "4000";
     expect(serverPort()).toBe(10000);
+  });
+
+  it("운영은 Caddy 한 단계를 신뢰하고 개발 환경은 직접 접속으로 처리한다", () => {
+    process.env.NODE_ENV = "production";
+    expect(trustProxyHops()).toBe(1);
+    process.env.NODE_ENV = "test";
+    expect(trustProxyHops()).toBe(0);
+  });
+
+  it("프록시 홉 수의 잘못된 값은 시작 전에 거부한다", () => {
+    process.env.TRUST_PROXY_HOPS = "all";
+    expect(() => trustProxyHops()).toThrow("TRUST_PROXY_HOPS");
   });
 
   it("운영 환경의 예시 비밀값을 거부한다", () => {

@@ -1,0 +1,63 @@
+{
+	# The public API is only reached through Caddy, so its administration API is not exposed.
+	admin off
+}
+
+(web_security) {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		-Server
+	}
+}
+
+# Sakura's free standard hostname serves the whole system from one HTTPS origin.
+{$PUBLIC_DOMAIN} {
+	import web_security
+
+	@staff_root path /staff
+	redir @staff_root /staff/ 308
+	handle_path /staff/* {
+		reverse_proxy agent-web:80
+	}
+
+	@chat_root path /chat
+	redir @chat_root /chat/ 308
+	handle_path /chat/* {
+		reverse_proxy guest-web:80
+	}
+
+	handle /api/* {
+		reverse_proxy server:4000
+	}
+	@api_root path /api /api/
+	redir @api_root /api/health 302
+
+	# Socket.IO uses this transport path; /chat remains its logical namespace.
+	handle /socket.io/* {
+		reverse_proxy server:4000
+	}
+
+	handle {
+		redir * /staff/ 302
+	}
+}
+
+# Keep previously distributed temporary links working while moving users to the Sakura hostname.
+{$AGENT_DOMAIN} {
+	import web_security
+	redir https://{$PUBLIC_DOMAIN}/staff{uri} 302
+}
+
+{$GUEST_DOMAIN} {
+	import web_security
+	redir https://{$PUBLIC_DOMAIN}/chat{uri} 302
+}
+
+{$API_DOMAIN} {
+	import web_security
+	reverse_proxy server:4000
+}

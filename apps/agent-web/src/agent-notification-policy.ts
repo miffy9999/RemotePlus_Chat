@@ -13,6 +13,7 @@ export interface AgentAttentionDocument {
  */
 export function shouldNotifyAgent(
   target: AgentAttentionDocument = document,
+  viewingLog = false,
 ): boolean {
-  return target.visibilityState !== "visible" || !target.hasFocus();
+  return viewingLog || target.visibilityState !== "visible" || !target.hasFocus();
 }

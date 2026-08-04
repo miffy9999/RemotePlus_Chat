@@ -17,6 +17,7 @@ import {
   createRoom,
   deleteAdminAgent,
   deleteHotel,
+  deleteHotelLogo,
   deleteRoom,
   getMessages,
   listAdminAgents,
@@ -25,6 +26,7 @@ import {
   listSessionLogs,
   listSessions,
   loginStaff,
+  hotelLogoUrl,
   openSession,
   type AdminAgentView,
   type HotelView,
@@ -33,7 +35,11 @@ import {
   type SessionView,
   SOCKET_URL,
   updateHotelWelcomeMessage,
+  updateAdminAgentStatus,
+  updateRoomStatus,
+  uploadHotelLogo,
 } from "./api";
+import { toJapaneseUserMessage } from "@hotel-chat/shared";
 import {
   anchorCountdownDeadline,
   mergeMessage,
@@ -41,7 +47,7 @@ import {
   scrollChatToLatest,
 } from "./chat-utils";
 import { filterAgentSessions } from "./session-filters";
-import { LanguageProvider, LanguageSwitcher, useI18n } from "./i18n";
+import { LanguageProvider, useI18n } from "./i18n";
 import {
   AUTH_INVALID_EVENT,
   clearStoredAuth,
@@ -124,7 +130,7 @@ function LoginPage({
       navigate(staffHomePath(auth.agent.role));
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "로그인에 실패했습니다.",
+        reason instanceof Error ? reason.message : "ログインできませんでした。",
       );
     } finally {
       setLoading(false);
@@ -133,13 +139,11 @@ function LoginPage({
 
   return (
     <div className="login-shell">
-      <LanguageSwitcher />
       <form className="login-card" onSubmit={submit}>
         <div className="brand dark">
           REMOTE<span>+</span>
         </div>
         <h1>{t("직원 로그인")}</h1>
-        <p>{t("상담 센터 계정으로 로그인하세요.")}</p>
         <label>
           {t("로그인 ID")}
           <input
@@ -166,43 +170,33 @@ function LoginPage({
           role="group"
           aria-label={t("로그인 정보 저장 방식")}
         >
-          <button
-            type="button"
-            className={saveMode === "ID" ? "is-active" : ""}
-            aria-pressed={saveMode === "ID"}
-            onClick={() =>
-              setSaveMode((current) => (current === "ID" ? "NONE" : "ID"))
-            }
-          >
-            <span aria-hidden="true">✓</span>
-            {t("아이디 저장")}
-          </button>
-          <button
-            type="button"
-            className={saveMode === "CREDENTIALS" ? "is-active" : ""}
-            aria-pressed={saveMode === "CREDENTIALS"}
-            onClick={() =>
-              setSaveMode((current) =>
-                current === "CREDENTIALS" ? "NONE" : "CREDENTIALS",
-              )
-            }
-          >
-            <span aria-hidden="true">✓</span>
-            {t("로그인 정보 저장")}
-          </button>
+          <label>
+            <input
+              type="checkbox"
+              checked={saveMode === "ID"}
+              onChange={() =>
+                setSaveMode((current) => (current === "ID" ? "NONE" : "ID"))
+              }
+            />
+            <span>{t("아이디 저장")}</span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={saveMode === "CREDENTIALS"}
+              onChange={() =>
+                setSaveMode((current) =>
+                  current === "CREDENTIALS" ? "NONE" : "CREDENTIALS",
+                )
+              }
+            />
+            <span>{t("로그인 정보 저장")}</span>
+          </label>
         </div>
-        <small className="login-save-help">
-          {t(
-            "로그인 정보 저장은 브라우저 비밀번호 관리자를 사용합니다. 선택한 버튼을 다시 누르면 해제됩니다.",
-          )}
-        </small>
         {error && <div className="error-box">{error}</div>}
         <button disabled={loading}>
           {t(loading ? "로그인 중…" : "로그인")}
         </button>
-        <small>
-          {t("계정 역할에 따라 관리 또는 상담 화면으로 이동합니다.")}
-        </small>
       </form>
     </div>
   );
@@ -251,7 +245,7 @@ function AgentChat({
         sessionId: session.id,
       });
       if (!joined?.ok)
-        setError(joined?.error?.message ?? "상담방 입장에 실패했습니다.");
+        setError(toJapaneseUserMessage(joined?.error?.message));
     });
     socket.on("disconnect", () => setConnection("연결 끊김"));
     socket.io.on("reconnect_attempt", () => setConnection("재연결 중"));
@@ -268,7 +262,7 @@ function AgentChat({
       }
     });
     socket.on("chat:error", (payload: { message: string }) =>
-      setError(payload.message),
+      setError(toJapaneseUserMessage(payload.message)),
     );
     return () => {
       active = false;
@@ -302,7 +296,7 @@ function AgentChat({
       content,
     });
     if (!result?.ok)
-      setError(result?.error?.message ?? "메시지 전송에 실패했습니다.");
+      setError(toJapaneseUserMessage(result?.error?.message));
   }
 
   /** 브라우저 기본 확인창 대신 화면 안의 확인창을 사용해 모바일과 자동화 환경에서도 같은 흐름을 제공합니다. */
@@ -500,6 +494,34 @@ function AgentNoticePopup({
   );
 }
 
+/** 등록 로고가 있으면 이미지를, 없거나 로딩에 실패하면 기존 글자 아바타를 표시합니다. */
+function HotelAvatar({
+  hotel,
+  fallback,
+  className = "line-room-avatar",
+}: {
+  hotel: { id: string; name: string; logoUpdatedAt?: string | null };
+  fallback: string;
+  className?: string;
+}): React.JSX.Element {
+  const logoUrl = hotelLogoUrl(hotel);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [logoUrl]);
+  return (
+    <span className={className} aria-label={hotel.name}>
+      {logoUrl && !failed ? (
+        <img
+          src={logoUrl}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onError={() => setFailed(true)}
+        />
+      ) : fallback}
+    </span>
+  );
+}
+
 const TERMINAL_SESSION_STATUSES = ["CLOSED", "EXPIRED", "CANCELLED", "BLOCKED"];
 
 /** LINE형 오른쪽 본문은 진행 상담은 실시간으로, 종료 Log는 읽기 전용으로 같은 모양에 표시합니다. */
@@ -558,7 +580,7 @@ function LineConversationPanel({
     socket.on("connect", async () => {
       setConnection(adminReadOnly ? "관리자 조회" : "연결됨");
       const joined = await socket.emitWithAck("chat:join", { sessionId: session.id });
-      if (!joined?.ok) setError(joined?.error?.message ?? t("상담방 입장에 실패했습니다."));
+      if (!joined?.ok) setError(toJapaneseUserMessage(joined?.error?.message));
     });
     socket.on("disconnect", () => setConnection("연결 끊김"));
     socket.io.on("reconnect_attempt", () => setConnection("재연결 중"));
@@ -573,7 +595,7 @@ function LineConversationPanel({
     socket.on("chat:session-closed", (updated: SessionView) => {
       if (updated.id === session.id) { setSession(updated); onChanged(updated); }
     });
-    socket.on("chat:error", (payload: { message: string }) => setError(payload.message));
+    socket.on("chat:error", (payload: { message: string }) => setError(toJapaneseUserMessage(payload.message)));
     return () => { active = false; socket.disconnect(); socketRef.current = null; };
   }, [adminReadOnly, auth.accessToken, readOnly, session.id, session.status, t]);
   useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
@@ -585,7 +607,7 @@ function LineConversationPanel({
     if (!content || readOnly || session.status !== "ACTIVE" || !socketRef.current) return;
     setInput("");
     const result = await socketRef.current.emitWithAck("chat:message", { sessionId: session.id, clientMessageId: crypto.randomUUID(), content });
-    if (!result?.ok) setError(result?.error?.message ?? t("메시지 전송에 실패했습니다."));
+    if (!result?.ok) setError(toJapaneseUserMessage(result?.error?.message));
   }
   async function closeConversation() {
     try {
@@ -607,7 +629,7 @@ function LineConversationPanel({
     <section className="line-conversation-panel">
       <header className="line-conversation-header">
         <button className="line-mobile-back" onClick={onBack} aria-label={t("목록")}>‹</button>
-        <span className="line-room-avatar">{session.room.roomNumber.slice(-2)}</span>
+        <HotelAvatar hotel={session.room.hotel} fallback={session.room.roomNumber.slice(-2)} />
         <div className="line-conversation-identity">
           <h2>{session.room.hotel.name} · {session.room.roomNumber}{t("호")}</h2>
           <p>
@@ -644,7 +666,6 @@ function LineConversationPanel({
         </div>
       </div>
       <form className="line-chat-composer" onSubmit={send}>
-        <span aria-hidden="true">＋</span>
         <input value={input} onChange={(event) => setInput(event.target.value)} maxLength={1000} disabled={!writable} placeholder={t(adminReadOnly ? "관리자 읽기 전용 조회입니다" : readOnly ? "종료된 상담 기록입니다" : "메시지를 입력하세요")}/>
         <button disabled={!writable || !input.trim()}>{t("전송")}</button>
       </form>
@@ -672,6 +693,7 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const [logRefreshToken, setLogRefreshToken] = useState(0);
   const [selected, setSelected] = useState<SessionView | null>(null);
   const [mode, setMode] = useState<"current" | "log">("current");
+  const modeRef = useRef(mode);
   const [search, setSearch] = useState("");
   const [hotelFilter, setHotelFilter] = useState("");
   const [languageFilter, setLanguageFilter] = useState("");
@@ -701,6 +723,10 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     startWidth: number;
   } | null>(null);
   const sidebarWidthRef = useRef(sidebarWidth);
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   useEffect(() => {
     sidebarWidthRef.current = sidebarWidth;
@@ -740,8 +766,8 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   }, []);
 
   function announce(nextNotice: AgentNotice): void {
-    // 상담 화면을 직접 보고 있는 동안에는 화면 팝업·제목 점멸·시스템 알림을 만들지 않습니다.
-    if (!shouldNotifyAgent(document)) return;
+    // Current 화면을 직접 보는 중에는 중복 팝업을 막되, Log 화면에서는 새 Guest 상담을 놓치지 않게 표시합니다.
+    if (!shouldNotifyAgent(document, modeRef.current === "log")) return;
     setNotice(nextNotice);
     titleFlasherRef.current?.start(nextNotice.title);
     showSystemNotification(nextNotice.title, nextNotice.body, nextNotice.id);
@@ -921,6 +947,10 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       ),
     [auth.agent.id, isAdminView, sessions],
   );
+  const waitingSessionCount = useMemo(
+    () => currentSessions.filter((session) => session.status === "WAITING").length,
+    [currentSessions],
+  );
   const hotels = useMemo(
     () =>
       [
@@ -1098,7 +1128,6 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
             </span>
             <strong>{displayedStaffName}</strong>
           </div>
-          <LanguageSwitcher/>
           <div className="line-agent-controls">
             <button className="link-button" disabled={notificationPermission !== "default"} onClick={() => void enableBrowserNotifications()}>
               <span className="line-agent-control-icon" aria-hidden="true">♢</span>
@@ -1124,7 +1153,14 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         <aside className="line-agent-list">
           {/* 공통 사용자 메뉴를 제거해 상담 탭부터 목록 영역이 바로 시작됩니다. */}
           <div className="line-inbox-tabs">
-            <button className={mode === "current" ? "active" : ""} onClick={() => changeMode("current")}>{t("Current chat room")} <em>{currentSessions.length}</em></button>
+            <button className={mode === "current" ? "active" : ""} onClick={() => changeMode("current")}>
+              {t("Current chat room")} <em>{currentSessions.length}</em>
+              {waitingSessionCount > 0 && (
+                <span className="line-unread-badge" aria-label={`${waitingSessionCount}件の新着相談`}>
+                  {waitingSessionCount > 99 ? "99+" : waitingSessionCount}
+                </span>
+              )}
+            </button>
             <button className={mode === "log" ? "active" : ""} onClick={() => changeMode("log")}>{t("Log")} <em>{logTotal}</em></button>
           </div>
           <label className="line-search"><span>⌕</span><input value={search} onChange={(event) => { setSearch(event.target.value); if (mode === "log") setLogPage(1); }} placeholder={t("대화방, 메시지 검색")}/></label>
@@ -1138,9 +1174,12 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
             {visibleSessions.length === 0 && <div className="line-empty"><span>{mode === "current" ? "✓" : "⌁"}</span><strong>{t(mode === "current" ? "현재 상담이 없습니다." : logLoading ? "상담 기록을 불러오는 중입니다." : "조건에 맞는 기록이 없습니다.")}</strong></div>}
             {visibleSessions.map((session) => (
               <button key={session.id} className={`line-conversation-item ${selected?.id === session.id ? "selected" : ""}`} onClick={() => void choose(session)}>
-                <span className="line-room-avatar">{session.room.roomNumber.slice(-2)}</span>
+                <HotelAvatar hotel={session.room.hotel} fallback={session.room.roomNumber.slice(-2)} />
                 <span><strong>{session.room.hotel.name} · {session.room.roomNumber}{t("호")}</strong><small>{session.lastMessage?.content ?? t(session.status === "WAITING" ? "새 문의가 도착했습니다." : session.status)}</small><em>{session.language.toUpperCase()} · {t("담당 상담원")}: {session.agent?.name ?? t("담당자 없음")}</em></span>
-                <time>{new Date(session.lastMessage?.createdAt ?? session.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</time>
+                <span className="line-conversation-meta">
+                  <time>{new Date(session.lastMessage?.createdAt ?? session.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</time>
+                  {session.status === "WAITING" ? <span className="line-chat-badge" aria-label="新着相談1件">1</span> : null}
+                </span>
               </button>
             ))}
           </div>
@@ -1985,14 +2024,20 @@ function RoomQrModal({
 }
 
 /** 관리자 화면은 Agent·호텔·룸 CRUD, 고객 주소와 객실별 고정 QR 관리를 제공합니다. */
+const WELCOME_LANGUAGES = [
+  { code: "ja", label: "日本語", inputLabel: "日本語メッセージ" },
+  { code: "en", label: "English", inputLabel: "English message" },
+  { code: "ko", label: "한국어", inputLabel: "한국어 메시지" },
+  { code: "zh", label: "中文", inputLabel: "中文消息" },
+] as const;
+type WelcomeLanguage = (typeof WELCOME_LANGUAGES)[number]["code"];
+
 function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const { language, t } = useI18n();
   const navigate = useNavigate();
   const [agents, setAgents] = useState<AdminAgentView[]>([]);
   const [hotels, setHotels] = useState<HotelView[]>([]);
   const [rooms, setRooms] = useState<RoomView[]>([]);
-  // null은 API에 hotelId를 보내지 않는 "접근 가능한 전체 호텔"이며 실제 호텔 ID와 겹치지 않습니다.
-  const [selectedHotelId, setSelectedHotelId] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [agentForm, setAgentForm] = useState({
     name: "",
@@ -2002,20 +2047,27 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   const [hotelName, setHotelName] = useState("");
   const [roomNumber, setRoomNumber] = useState("");
   const [roomHotelId, setRoomHotelId] = useState("");
+  const [roomPage, setRoomPage] = useState(1);
+  const [roomTotal, setRoomTotal] = useState(0);
+  const [roomTotalPages, setRoomTotalPages] = useState(1);
   const [hotelError, setHotelError] = useState("");
   const [roomError, setRoomError] = useState("");
   const [qrRoom, setQrRoom] = useState<RoomView | null>(null);
   const [showPasswordChange, setShowPasswordChange] = useState(false);
-  const [welcomeLanguage, setWelcomeLanguage] = useState<"ja" | "en">("ja");
+  const [welcomeLanguage, setWelcomeLanguage] = useState<WelcomeLanguage>("ja");
   const [welcomeMessage, setWelcomeMessage] = useState("");
   const [welcomeError, setWelcomeError] = useState("");
   const [welcomeSaved, setWelcomeSaved] = useState("");
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+  const [logoError, setLogoError] = useState("");
   const [activeAdminSection, setActiveAdminSection] = useState<
     "hotels" | "agents"
   >("hotels");
   const [adminMenuCollapsed, setAdminMenuCollapsed] = useState(
     () => window.localStorage.getItem("remoteplus-admin-menu-collapsed") === "true",
   );
+  const refreshRequestId = useRef(0);
 
   /** 넓은 화면에서 관리 메뉴 폭을 줄인 선택을 같은 브라우저에 기억합니다. */
   function toggleAdminMenu(): void {
@@ -2030,34 +2082,38 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   }
 
   async function refresh() {
+    const requestId = ++refreshRequestId.current;
     try {
       const [a, h, r] = await Promise.all([
         listAdminAgents(auth.accessToken),
         listHotels(auth.accessToken),
-        // 전체 호텔은 undefined로 호출해 "all" 같은 가짜 ID가 서버에 전달되지 않게 합니다.
-        listRooms(auth.accessToken, selectedHotelId ?? undefined),
+        // 아래 호텔 선택창의 빈 값은 전체 객실, UUID는 해당 호텔 객실만 조회합니다.
+        listRooms(auth.accessToken, roomHotelId || undefined, roomPage),
       ]);
+      if (requestId !== refreshRequestId.current) return;
       setAgents(a);
       setHotels(h);
-      setRooms(r);
-      setRoomHotelId((current) =>
-        h.some((hotel) => hotel.id === current) ? current : (h[0]?.id ?? ""),
-      );
+      setRooms(r.items);
+      setRoomPage(r.page);
+      setRoomTotal(r.total);
+      setRoomTotalPages(r.totalPages);
+      setRoomHotelId((current) => h.some((hotel) => hotel.id === current) ? current : "");
       setError("");
     } catch (reason) {
+      if (requestId !== refreshRequestId.current) return;
       setError(
         reason instanceof Error
           ? reason.message
-          : "관리 데이터를 불러오지 못했습니다.",
+          : "管理データを読み込めませんでした。",
       );
     }
   }
   useEffect(() => {
     void refresh();
-  }, [selectedHotelId]);
+  }, [roomHotelId, roomPage]);
   useEffect(() => {
     const hotel = hotels.find((item) => item.id === roomHotelId);
-    setWelcomeMessage(hotel ? (welcomeLanguage === "en" ? hotel.welcomeMessageEn : hotel.welcomeMessage) : "");
+    setWelcomeMessage(hotel?.welcomeMessages.find((item) => item.language === welcomeLanguage)?.message ?? "");
     setWelcomeError("");
     setWelcomeSaved("");
   }, [hotels, roomHotelId, welcomeLanguage]);
@@ -2068,7 +2124,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       setAgentForm({ name: "", loginId: "", password: "" });
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Agent 추가 실패");
+      setError(reason instanceof Error ? reason.message : "Agentを追加できませんでした。");
     }
   }
   /** 호텔 생성 오류는 호텔 입력 블록에만 표시해 어느 요청이 실패했는지 즉시 알 수 있게 합니다. */
@@ -2081,7 +2137,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       await refresh();
     } catch (reason) {
       setHotelError(
-        reason instanceof Error ? reason.message : "호텔 추가 실패",
+        reason instanceof Error ? reason.message : "ホテルを追加できませんでした。",
       );
     }
   }
@@ -2094,7 +2150,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       setRoomNumber("");
       await refresh();
     } catch (reason) {
-      setRoomError(reason instanceof Error ? reason.message : "룸 추가 실패");
+      setRoomError(reason instanceof Error ? reason.message : "客室を追加できませんでした。");
     }
   }
   /** 언어별 원문을 저장하고 이미 생성된 상담 기록은 변경하지 않은 채 다음 신규 상담부터 적용합니다. */
@@ -2110,6 +2166,53 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       setWelcomeError(reason instanceof Error ? reason.message : t("자동 안내문 저장 실패"));
     }
   }
+  async function toggleAgentStatus(agent: AdminAgentView) {
+    try {
+      await updateAdminAgentStatus(auth.accessToken, agent.id, agent.status === "ACTIVE" ? "INACTIVE" : "ACTIVE");
+      await refresh();
+    } catch (reason) {
+      setError(toJapaneseUserMessage(reason instanceof Error ? reason.message : reason));
+    }
+  }
+  async function toggleRoomStatus(room: RoomView) {
+    try {
+      await updateRoomStatus(auth.accessToken, room.id, room.status === "ACTIVE" ? "INACTIVE" : "ACTIVE");
+      await refresh();
+    } catch (reason) {
+      setError(toJapaneseUserMessage(reason instanceof Error ? reason.message : reason));
+    }
+  }
+
+  async function saveHotelLogo(event: FormEvent) {
+    event.preventDefault();
+    if (!roomHotelId || !logoFile) return;
+    setLogoBusy(true);
+    setLogoError("");
+    try {
+      await uploadHotelLogo(auth.accessToken, roomHotelId, logoFile);
+      setLogoFile(null);
+      await refresh();
+    } catch (reason) {
+      setLogoError(toJapaneseUserMessage(reason instanceof Error ? reason.message : reason));
+    } finally {
+      setLogoBusy(false);
+    }
+  }
+
+  async function removeHotelLogo() {
+    if (!roomHotelId) return;
+    setLogoBusy(true);
+    setLogoError("");
+    try {
+      await deleteHotelLogo(auth.accessToken, roomHotelId);
+      setLogoFile(null);
+      await refresh();
+    } catch (reason) {
+      setLogoError(toJapaneseUserMessage(reason instanceof Error ? reason.message : reason));
+    } finally {
+      setLogoBusy(false);
+    }
+  }
   /** 삭제 전 영향을 명확히 알리고 확인받아 실수로 운영 데이터를 제거하는 일을 줄입니다. */
   async function removeAgent(agent: AdminAgentView) {
     const message =
@@ -2121,7 +2224,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       await deleteAdminAgent(auth.accessToken, agent.id);
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Agent 삭제 실패");
+      setError(reason instanceof Error ? reason.message : "Agentを削除できませんでした。");
     }
   }
   async function removeHotel(hotel: HotelView) {
@@ -2132,10 +2235,10 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     if (!window.confirm(message)) return;
     try {
       await deleteHotel(auth.accessToken, hotel.id);
-      if (selectedHotelId === hotel.id) setSelectedHotelId(null);
+      if (roomHotelId === hotel.id) setRoomHotelId("");
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "호텔 삭제 실패");
+      setError(reason instanceof Error ? reason.message : "ホテルを削除できませんでした。");
     }
   }
   async function removeRoom(room: RoomView) {
@@ -2148,7 +2251,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       await deleteRoom(auth.accessToken, room.id);
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "룸 삭제 실패");
+      setError(reason instanceof Error ? reason.message : "客室を削除できませんでした。");
     }
   }
   function logout() {
@@ -2174,7 +2277,6 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           <h1>{t("관리자 페이지")}</h1>
         </div>
         <div className="admin-header-actions">
-          <LanguageSwitcher />
           <button
             className="secondary"
             onClick={() => setShowPasswordChange(true)}
@@ -2280,7 +2382,11 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
                 <tr key={agent.id}>
                   <td data-label={t("이름")}>{agent.name}</td>
                   <td data-label={t("ID")}>{agent.loginId}</td>
-                  <td data-label={t("상태")}>{agent.status}</td>
+                  <td data-label={t("상태")}>
+                    <button type="button" className={`status-toggle compact ${agent.status.toLowerCase()}`} onClick={() => void toggleAgentStatus(agent)}>
+                      {t(agent.status === "ACTIVE" ? "사용 중" : "정지 중")}
+                    </button>
+                  </td>
                   <td data-label={t("관리")}>
                     <button
                       className="danger compact"
@@ -2300,8 +2406,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       <>
       <section className="card admin-property-card admin-hotel-card">
         <div className="admin-panel-title">
-          <div><span className="section-eyebrow">PROPERTY</span><h2>{t("호텔·룸 관리")}</h2><p>{t("호텔과 객실, 고객 접속 QR을 한곳에서 관리합니다.")}</p></div>
-          <strong>{rooms.length}</strong>
+          <div><span className="section-eyebrow">PROPERTY</span><h2>{t("호텔·룸 관리")}</h2></div>
         </div>
         {hotelError && (
           <div className="error-box form-error" role="alert">
@@ -2317,30 +2422,6 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           />
           <button disabled={!hotelName.trim()}>+ {t("호텔 추가")}</button>
         </form>
-        <div className="hotel-chip-list">
-          <button
-            type="button"
-            className={selectedHotelId === null ? "active" : ""}
-            onClick={() => setSelectedHotelId(null)}
-          >
-            <span aria-hidden="true">∞</span>
-            {t("전체 호텔")}
-          </button>
-          {hotels.map((hotel) => (
-            <button
-              type="button"
-              key={hotel.id}
-              className={selectedHotelId === hotel.id ? "active" : ""}
-              onClick={() => {
-                setSelectedHotelId(hotel.id);
-                setRoomHotelId(hotel.id);
-              }}
-            >
-              <span>{hotel.name.slice(0, 1)}</span>
-              {hotel.name}
-            </button>
-          ))}
-        </div>
         {roomError && (
           <div className="error-box form-error" role="alert">
             {roomError}
@@ -2348,10 +2429,11 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         )}
         <form className="inline-form" onSubmit={addRoom}>
           <select
-            aria-label={t("룸을 추가할 호텔")}
+            aria-label={t("호텔 필터")}
             value={roomHotelId}
-            onChange={(e) => setRoomHotelId(e.target.value)}
+            onChange={(e) => { setRoomHotelId(e.target.value); setRoomPage(1); }}
           >
+            <option value="">{t("전체 호텔")}</option>
             {hotels.map((hotel) => (
               <option key={hotel.id} value={hotel.id}>
                 {hotel.name}
@@ -2364,7 +2446,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
             value={roomNumber}
             onChange={(e) => setRoomNumber(e.target.value)}
           />
-          <button>{t("룸 추가")}</button>
+          <button disabled={!roomHotelId || !roomNumber.trim()}>{t("룸 추가")}</button>
           <button
             type="button"
             className="danger"
@@ -2394,7 +2476,11 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
                 <tr key={room.id}>
                   <td data-label={t("호텔")}>{room.hotel.name}</td>
                   <td data-label={t("객실")}>{room.roomNumber}</td>
-                  <td data-label={t("상태")}>{room.status}</td>
+                  <td data-label={t("상태")}>
+                    <button type="button" className={`status-toggle compact ${room.status.toLowerCase()}`} onClick={() => void toggleRoomStatus(room)}>
+                      {t(room.status === "ACTIVE" ? "사용 중" : "정지 중")}
+                    </button>
+                  </td>
                   <td data-label={t("투숙객 주소")} className="room-link-cell">
                     {room.guestUrl ? (
                       <>
@@ -2409,7 +2495,7 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
                           className="secondary compact"
                           onClick={() =>
                             void copyGuestUrl(room.guestUrl!).catch(() =>
-                              setError("주소를 복사하지 못했습니다."),
+                              setError("URLをコピーできませんでした。"),
                             )
                           }
                         >
@@ -2443,6 +2529,56 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
             </tbody>
           </table>
       </div>
+      <nav className="admin-room-pagination" aria-label={t("객실 목록 페이지")}>
+        <button type="button" className="secondary compact" disabled={roomPage <= 1} onClick={() => setRoomPage((page) => Math.max(1, page - 1))}>{t("이전")}</button>
+        <span>{roomPage} / {roomTotalPages}<small>{roomTotal}{t("개 객실")}</small></span>
+        <button type="button" className="secondary compact" disabled={roomPage >= roomTotalPages} onClick={() => setRoomPage((page) => Math.min(roomTotalPages, page + 1))}>{t("다음")}</button>
+      </nav>
+      <section className="admin-logo-section">
+        <div className="section-head">
+          <div><span className="section-eyebrow">HOTEL LOGO</span><h2>{t("호텔 로고")}</h2></div>
+          {selectedHotel ? (
+            <HotelAvatar
+              hotel={selectedHotel}
+              fallback={selectedHotel.name.slice(0, 1)}
+              className="admin-hotel-logo-preview"
+            />
+          ) : null}
+        </div>
+        {logoError && <div className="error-box form-error">{logoError}</div>}
+        <form className="admin-logo-form" onSubmit={saveHotelLogo}>
+          <label>
+            {t("로고 이미지")}
+            <input
+              key={`${roomHotelId}-${selectedHotel?.logoUpdatedAt ?? "empty"}`}
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              disabled={!roomHotelId || logoBusy}
+              onChange={(event) => {
+                const file = event.target.files?.[0] ?? null;
+                if (file && file.size > 512 * 1024) {
+                  setLogoFile(null);
+                  setLogoError("ロゴ画像は512KB以下にしてください。");
+                  return;
+                }
+                setLogoError("");
+                setLogoFile(file);
+              }}
+            />
+          </label>
+          <small>{t("PNG·JPEG·WebP, 최대 512KB")}</small>
+          <div>
+            <button disabled={!roomHotelId || !logoFile || logoBusy}>
+              {t(selectedHotel?.logoUpdatedAt ? "로고 변경" : "로고 등록")}
+            </button>
+            {selectedHotel?.logoUpdatedAt && (
+              <button type="button" className="secondary" disabled={logoBusy} onClick={() => void removeHotelLogo()}>
+                {t("로고 삭제")}
+              </button>
+            )}
+          </div>
+        </form>
+      </section>
       <section className="admin-welcome-section">
         <div className="section-head">
           <div><span className="section-eyebrow">GUEST MESSAGE</span><h2>{t("호텔별 Guest 자동 안내문")}</h2><p>{t("위에서 선택한 호텔의 신규 상담 첫 메시지를 언어별로 설정합니다.")}</p></div>
@@ -2455,10 +2591,11 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         {welcomeSaved && <div className="success-box">{welcomeSaved}</div>}
         <form className="welcome-form" onSubmit={saveWelcomeMessage}>
           <div className="welcome-language-tabs" role="tablist" aria-label={t("안내문 언어")}>
-            <button type="button" className={welcomeLanguage === "ja" ? "active" : ""} onClick={() => setWelcomeLanguage("ja")}>日本語</button>
-            <button type="button" className={welcomeLanguage === "en" ? "active" : ""} onClick={() => setWelcomeLanguage("en")}>English</button>
+            {WELCOME_LANGUAGES.map((item) => (
+              <button key={item.code} type="button" className={welcomeLanguage === item.code ? "active" : ""} onClick={() => setWelcomeLanguage(item.code)}>{item.label}</button>
+            ))}
           </div>
-          <label>{welcomeLanguage === "en" ? "English message" : "日本語メッセージ"}<textarea value={welcomeMessage} onChange={(event) => { setWelcomeMessage(event.target.value); setWelcomeSaved(""); }} maxLength={1000} rows={5}/></label>
+          <label>{WELCOME_LANGUAGES.find((item) => item.code === welcomeLanguage)?.inputLabel}<textarea value={welcomeMessage} onChange={(event) => { setWelcomeMessage(event.target.value); setWelcomeSaved(""); }} maxLength={1000} rows={5}/></label>
           <div className="welcome-actions"><span>{welcomeMessage.length}/1000</span><button disabled={!roomHotelId || !welcomeMessage.trim()}>{t("안내문 저장")}</button></div>
         </form>
       </section>
@@ -2510,7 +2647,6 @@ function Page({
             <p>{subtitle}</p>
           </div>
           <div className="agent-header-actions">
-            <LanguageSwitcher />
             <div className="profile">
               {auth.agent.name}
               <span>AG</span>
@@ -2610,7 +2746,7 @@ function App(): React.JSX.Element {
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <LanguageProvider>
-      <BrowserRouter>
+      <BrowserRouter basename={import.meta.env.BASE_URL}>
         <App />
       </BrowserRouter>
     </LanguageProvider>

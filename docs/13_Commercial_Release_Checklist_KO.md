@@ -50,6 +50,13 @@ MIT는 상업 이용을 허용하지만 저작권 표시와 허가 문구를 복
 - [ ] 운영 비밀번호 정책, MFA, 로그인 실패 잠금, 비밀값 교체 절차를 마련한다.
 - [ ] PostgreSQL 자동 백업, 복구 시험, 장애 알림, 중앙 로그와 모니터링을 구성한다.
 - [ ] 무료 Render DB 만료 전에 유료 DB 또는 Sakura VPS 운영 DB로 이전한다.
+- [ ] `docs/14_Sakura_VPS_2GB_Deployment_Guide.md`에 따라 Render DB와 `ACCESS_KEY_ENCRYPTION_SECRET`을 함께 이전하고 상담 로그 건수를 대조한다.
+- [ ] 고정 QR 인쇄 전 Guest 주소를 회사 소유 도메인으로 확정해 향후 DNS 변경만으로 서버를 이전할 수 있게 한다.
+- [ ] Sakura VPS 내부 일일 백업 외에 회사 OneDrive/NAS 등 다른 장애 영역에 백업 사본을 자동 보관하고 시험 복구한다.
+- [ ] Sakura 패킷 필터와 UFW를 중복 사용하지 않고 UFW의 22/80/443 TCP 규칙만 유지하며, 기본 비활성 IPv6를 불필요하게 켜지 않는다.
+- [ ] Sakura 서버 감시에 API HTTPS 헬스 체크와 회사 메일 알림을 등록하고 실제 장애·복구 알림을 시험한다.
+- [ ] 서로 다른 회사 담당자 SSH 키 두 개로 접속을 확인한 뒤에만 비밀번호 로그인을 끈다.
+- [x] `GHSA-qwww-vcr4-c8h2`는 unstable RSC API 전용이며 현재 Vite 정적 SPA는 해당하지 않음을 2026-08-03 확인했다. 향후 RSC/SSR 도입 전 React Router 8.3.0 이상으로 갱신한다.
 - [ ] 취약점·의존성 업데이트 정책과 정기 보안 점검 일정을 만든다.
 
 ## 4. 서비스 계약과 고객 고지

@@ -48,7 +48,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
         }
         throw new Error("인증 정보가 없습니다.");
       } catch {
-        const error = new Error("인증되지 않은 WebSocket 연결입니다.") as Error & { data?: RealtimeErrorView };
+        const error = new Error("認証されていないWebSocket接続です。") as Error & { data?: RealtimeErrorView };
         error.data = { code: "UNAUTHORIZED", message: error.message };
         next(error);
       }
@@ -92,7 +92,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   async message(@ConnectedSocket() socket: Socket, @MessageBody() payload: unknown) {
     try {
       // 연결별 분당 60개를 넘는 메시지는 저장 전에 차단해 반복 전송으로부터 DB와 상대방을 보호한다.
-      if (!this.messageRates.allow(socket.id, 60)) throw new HttpException("메시지를 너무 빠르게 보내고 있습니다.", 429);
+      if (!this.messageRates.allow(socket.id, 60)) throw new HttpException("メッセージの送信が多すぎます。少し待ってからもう一度お試しください。", 429);
       const saved = await this.messages.save(this.identity(socket), payload);
       const view = { ...saved.message, createdAt: saved.message.createdAt.toISOString(), duplicate: saved.duplicate };
       socket.emit(CHAT_EVENTS.accepted, view);
@@ -133,7 +133,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
   private staffRoom(): string { return "staff:all"; }
 
   private emitError(socket: Socket, error: unknown) {
-    const message = error instanceof HttpException ? String(error.getResponse() instanceof Object ? (error.getResponse() as any).message : error.message) : error instanceof Error ? error.message : "채팅 처리 중 오류가 발생했습니다.";
+    const message = error instanceof HttpException ? String(error.getResponse() instanceof Object ? (error.getResponse() as any).message : error.message) : error instanceof Error ? error.message : "チャットの処理中にエラーが発生しました。";
     const view = { code: error instanceof HttpException ? `HTTP_${error.getStatus()}` : "CHAT_ERROR", message } satisfies RealtimeErrorView;
     this.logger.warn(`WebSocket 요청 거부: ${view.code}`);
     socket.emit(CHAT_EVENTS.error, view);

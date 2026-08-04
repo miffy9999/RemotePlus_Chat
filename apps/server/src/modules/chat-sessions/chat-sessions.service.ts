@@ -57,7 +57,7 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
   async create(guest: GuestAccessPayload, language: string) {
     const accessKey = await this.prisma.roomAccessKey.findUnique({
       where: { id: guest.sub },
-      include: { room: { include: { hotel: true } } },
+      include: { room: { include: { hotel: { include: { welcomeMessages: true } } } } },
     });
     if (!accessKey || accessKey.roomId !== guest.roomId || accessKey.status !== "ACTIVE") throw new UnauthorizedException("객실 접근 권한이 만료되었습니다.");
 
@@ -80,8 +80,10 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
               senderId: null,
               clientMessageId: "hotel-welcome",
               messageType: "SYSTEM",
-              // 영어 Guest에는 영어 원문을, 그 외 지원 언어에는 현재 MVP 기본 원문인 일본어를 저장합니다.
-              content: language === "en" ? accessKey.room.hotel.welcomeMessageEn : accessKey.room.hotel.welcomeMessage,
+              // 호텔·언어 조합의 원문을 우선 사용하고, 설정이 없으면 일본어 안내로 안전하게 대체합니다.
+              content: accessKey.room.hotel.welcomeMessages.find((item) => item.language === language)?.message
+                ?? accessKey.room.hotel.welcomeMessages.find((item) => item.language === "ja")?.message
+                ?? accessKey.room.hotel.welcomeMessage,
             },
           },
         },

@@ -20,6 +20,14 @@ flowchart LR
 
 관리자가 룸을 추가하면 서버는 추측하기 어려운 접근키를 생성한다. 검증용 SHA-256 해시와 관리자 화면 복원용 AES-256-GCM 암호문만 DB에 저장한다. 관리자 API는 ADMIN 권한을 확인한 뒤 암호문을 복호화하여 `GUEST_PUBLIC_URL/?accessKey=...` 형식의 고객 주소를 돌려준다. 고객 접속 시에는 전달된 키의 해시로 룸을 검증한다.
 
+## Sakura VPS 2GB 운영 경계
+
+운영 배포는 개발용 `compose.yaml`과 분리된 `compose.vps.yaml`을 사용한다. Caddy만 호스트의 80/443을 공개하고 도메인별로 Agent 웹, Guest 웹, API/WebSocket을 전달한다. API와 PostgreSQL은 호스트 포트를 열지 않으며 PostgreSQL은 Docker 내부 전용 네트워크에만 둔다.
+
+일반 배포는 기존 DB 백업 → 순차 이미지 빌드 → Prisma 운영 마이그레이션 → API 교체 순서로 실행한다. 개발 시드는 빈 DB의 최초 `--bootstrap`에서만 실행하며 코드 업데이트에는 포함하지 않는다. 이 경계는 재배포가 직원의 변경 비밀번호나 객실 고정 QR 접근키를 다시 초기화하지 않게 한다.
+
+2GB 메모리 한계에는 컨테이너별 상한, PostgreSQL 연결·버퍼 제한, Node.js 힙 상한, 2GB swap과 순차 빌드로 대응한다. DB custom-format 백업은 매일 만들되 같은 VPS 외부의 회사 소유 저장소에 별도 사본을 둔다.
+
 ## 2. 전체 구조
 
 ```mermaid

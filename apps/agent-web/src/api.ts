@@ -1,4 +1,5 @@
 import { AUTH_INVALID_EVENT, type AgentAuth } from "./auth-storage";
+import { toJapaneseUserMessage } from "@hotel-chat/shared";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:4000/api";
 
@@ -21,7 +22,7 @@ export interface SessionView {
   createdAt: string;
   lastActivityAt?: string;
   lastMessage?: MessageView | null;
-  room: { roomNumber: string; hotel: { id: string; name: string } };
+  room: { roomNumber: string; hotel: { id: string; name: string; logoUpdatedAt?: string | null } };
 }
 
 export interface MessageView {
@@ -64,14 +65,19 @@ class ApiError extends Error {
 /** 모든 REST 요청에서 오류 본문을 읽어 사용자가 이해할 수 있는 메시지로 바꿉니다. */
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const requestHeaders = new Headers(init.headers);
-  if (!requestHeaders.has("content-type")) requestHeaders.set("content-type", "application/json");
-  const response = await fetch(`${API_URL}${path}`, { ...init, headers: requestHeaders });
+  if (!(init.body instanceof FormData) && !requestHeaders.has("content-type")) requestHeaders.set("content-type", "application/json");
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { ...init, headers: requestHeaders });
+  } catch (reason) {
+    throw new ApiError(toJapaneseUserMessage(reason instanceof Error ? reason.message : reason), 0);
+  }
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
     // 장기 저장된 JWT가 만료되거나 서버에서 거부되면 화면 상태도 즉시 로그아웃으로 전환합니다.
     if (response.status === 401 && requestHeaders.has("authorization") && typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_INVALID_EVENT));
     const message = Array.isArray(body.message) ? body.message.join(", ") : body.message;
-    throw new ApiError(message ?? "서버 요청에 실패했습니다.", response.status);
+    throw new ApiError(toJapaneseUserMessage(message, response.status), response.status);
   }
   return body as T;
 }
@@ -226,22 +232,41 @@ export function closeSession(token: string, sessionId: string) {
 export const SOCKET_URL = import.meta.env.VITE_SOCKET_URL ?? "http://127.0.0.1:4000/chat";
 
 export interface AdminAgentView { id: string; name: string; loginId: string; role: "AGENT"; status: "ACTIVE" | "INACTIVE"; createdAt: string }
-export interface HotelView { id: string; name: string; welcomeMessage: string; welcomeMessageEn: string; status: "ACTIVE" | "INACTIVE"; createdAt: string }
+export interface HotelWelcomeMessageView { language: string; message: string }
+export interface HotelView { id: string; name: string; welcomeMessages: HotelWelcomeMessageView[]; logoUpdatedAt: string | null; status: "ACTIVE" | "INACTIVE"; createdAt: string }
 export interface RoomView { id: string; hotelId: string; roomNumber: string; status: "ACTIVE" | "INACTIVE"; createdAt: string; hotel: HotelView; guestUrl: string | null }
+export interface RoomPageView { items: RoomView[]; total: number; page: number; pageSize: 20; totalPages: number }
 /** 관리자 관리 API는 통합 로그인에서 받은 ADMIN 역할 JWT를 요구해 Agent 상담 권한과 분리합니다. */
 export function listAdminAgents(token: string) { return request<AdminAgentView[]>("/admin/agents", { headers: { authorization: `Bearer ${token}` } }); }
 export function createAdminAgent(token: string, input: { name: string; loginId: string; password: string }) { return request<AdminAgentView>("/admin/agents", { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ ...input, role: "AGENT" }) }); }
+export function updateAdminAgentStatus(token: string, id: string, status: "ACTIVE" | "INACTIVE") { return request<AdminAgentView>(`/admin/agents/${id}/status`, { method: "PATCH", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }); }
 /** 관리자 확인을 거친 Agent 계정을 삭제하며 기존 상담 기록은 서버가 보존합니다. */
 export function deleteAdminAgent(token: string, id: string) { return request<{ deletedId: string }>(`/admin/agents/${id}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } }); }
 export function listHotels(token: string) { return request<HotelView[]>("/admin/hotels", { headers: { authorization: `Bearer ${token}` } }); }
 export function createHotel(token: string, name: string) { return request<HotelView>("/admin/hotels", { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ name }) }); }
 /** 선택 호텔의 언어별 Guest 첫 안내문을 이후 신규 상담에 적용합니다. */
-export function updateHotelWelcomeMessage(token: string, id: string, language: "ja" | "en", welcomeMessage: string) {
+export function updateHotelWelcomeMessage(token: string, id: string, language: string, welcomeMessage: string) {
   return request<HotelView>(`/admin/hotels/${id}/welcome-message`, { method: "PATCH", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ language, welcomeMessage }) });
+}
+export function uploadHotelLogo(token: string, id: string, file: File) {
+  const form = new FormData();
+  form.append("logo", file);
+  return request<HotelView>(`/admin/hotels/${id}/logo`, { method: "PUT", headers: { authorization: `Bearer ${token}` }, body: form });
+}
+export function deleteHotelLogo(token: string, id: string) {
+  return request<HotelView>(`/admin/hotels/${id}/logo`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } });
+}
+export function hotelLogoUrl(hotel: { id: string; logoUpdatedAt?: string | null }): string | null {
+  return hotel.logoUpdatedAt ? `${API_URL}/hotel-logos/${hotel.id}?v=${encodeURIComponent(hotel.logoUpdatedAt)}` : null;
 }
 /** 호텔과 모든 하위 룸·상담 데이터의 연쇄 삭제를 서버에 요청합니다. */
 export function deleteHotel(token: string, id: string) { return request<{ deletedId: string }>(`/admin/hotels/${id}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } }); }
-export function listRooms(token: string, hotelId?: string) { return request<RoomView[]>(`/admin/rooms${hotelId ? `?hotelId=${encodeURIComponent(hotelId)}` : ""}`, { headers: { authorization: `Bearer ${token}` } }); }
+export function listRooms(token: string, hotelId: string | undefined, page = 1) {
+  const query = new URLSearchParams({ page: String(page) });
+  if (hotelId) query.set("hotelId", hotelId);
+  return request<RoomPageView>(`/admin/rooms?${query.toString()}`, { headers: { authorization: `Bearer ${token}` } });
+}
 export function createRoom(token: string, hotelId: string, roomNumber: string) { return request<RoomView>("/admin/rooms", { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ hotelId, roomNumber }) }); }
+export function updateRoomStatus(token: string, id: string, status: "ACTIVE" | "INACTIVE") { return request<RoomView>(`/admin/rooms/${id}/status`, { method: "PATCH", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ status }) }); }
 /** 룸과 연결된 접근키·상담·메시지를 함께 삭제하도록 서버에 요청합니다. */
 export function deleteRoom(token: string, id: string) { return request<{ deletedId: string }>(`/admin/rooms/${id}`, { method: "DELETE", headers: { authorization: `Bearer ${token}` } }); }

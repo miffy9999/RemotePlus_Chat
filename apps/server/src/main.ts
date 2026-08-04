@@ -5,7 +5,7 @@ import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
 import type { NextFunction, Request, Response } from "express";
-import { allowedWebOrigins, serverPort, validateRuntimeEnvironment } from "./common/config/environment";
+import { allowedWebOrigins, serverPort, trustProxyHops, validateRuntimeEnvironment } from "./common/config/environment";
 import { FixedWindowRateLimiter } from "./common/security/fixed-window-rate-limiter";
 import { restRateLimitPolicy } from "./common/security/rest-rate-limit-policy";
 
@@ -20,7 +20,7 @@ function rateLimit(request: Request, response: Response, next: NextFunction): vo
     path: request.path,
     authorization: request.header("authorization"),
   });
-  if (!restRateLimiter.allow(key, limit)) { response.status(429).json({ statusCode: 429, message: "요청이 너무 많습니다. 잠시 후 다시 시도하세요." }); return; }
+  if (!restRateLimiter.allow(key, limit)) { response.status(429).json({ statusCode: 429, message: "リクエストが多すぎます。しばらくしてからもう一度お試しください。" }); return; }
   next();
 }
 
@@ -32,6 +32,12 @@ async function bootstrap(): Promise<void> {
   validateRuntimeEnvironment();
   const port = serverPort();
   const app = await NestFactory.create(AppModule);
+  const proxyHops = trustProxyHops();
+  if (proxyHops > 0) {
+    // 운영 API는 인터넷에 직접 공개하지 않고 Caddy 한 단계를 거친다. 신뢰 홉 수를 제한해 사용자가 보낸
+    // 임의 X-Forwarded-For가 아니라 프록시가 기록한 실제 접속 IP로 요청 제한과 보안 로그를 계산한다.
+    app.getHttpAdapter().getInstance().set("trust proxy", proxyHops);
+  }
   app.setGlobalPrefix("api");
   app.use(helmet());
   // 로그인·접근 키·세션 API를 포함한 모든 REST 요청에 IP·경로별 상한을 적용한다.

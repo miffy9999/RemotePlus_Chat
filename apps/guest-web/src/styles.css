@@ -38,3 +38,10 @@ footer { position: sticky; z-index: 2; bottom: 0; border-top: 1px solid #e9edf4;
 .guest-confirm-modal .cancel { color: #536078; background: #eef1f6; }
 .guest-confirm-modal .confirm { color: white; background: #c34f43; }
 .guest-confirm-modal button:disabled { opacity: .55; }
+
+/* Keep the consent screen inside narrow mobile viewports even when its text has a large intrinsic width. */
+.center-card { width: 100%; align-content: center; place-content: normal; }
+.consent-card { width: 100%; max-width: 430px; min-width: 0; }
+.consent-card > * { min-width: 0; }
+.consent-card p, .agreement span { overflow-wrap: anywhere; }
+.consent-card select, .consent-card button { width: 100%; }

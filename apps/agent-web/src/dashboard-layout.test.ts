@@ -36,9 +36,6 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
     expect(styles).toMatch(
       /\.line-agent-topbar-actions\s*\{[^}]*margin-left:\s*auto;/,
     );
-    expect(styles).toContain(
-      ".line-agent-topbar .language-switcher > span { white-space: nowrap; }",
-    );
   });
 
   /** 시각적 CSS 순서에 의존하지 않고 DOM 자체가 요구된 메뉴 순서를 보장해야 합니다. */
@@ -53,8 +50,7 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
     expect(topbar.indexOf('className="agent-brand"')).toBeLessThan(actionsStart);
     expect(actions.indexOf('className="line-agent-account"')).toBeLessThan(actions.indexOf("<strong>{displayedStaffName}</strong>"));
     expect(actions.indexOf('aria-hidden="true"')).toBeLessThan(actions.indexOf("<strong>{displayedStaffName}</strong>"));
-    expect(actions.indexOf("<strong>{displayedStaffName}</strong>")).toBeLessThan(actions.indexOf("<LanguageSwitcher/>"));
-    expect(actions.indexOf("<LanguageSwitcher/>")).toBeLessThan(actions.indexOf('className="line-agent-controls"'));
+    expect(actions.indexOf("<strong>{displayedStaffName}</strong>")).toBeLessThan(actions.indexOf('className="line-agent-controls"'));
     expect(actions.indexOf("notificationButtonLabel")).toBeLessThan(actions.indexOf('onClick={() => setShowPasswordChange(true)}'));
     expect(actions.indexOf('onClick={() => setShowPasswordChange(true)}')).toBeLessThan(actions.indexOf("onClick={logout}"));
     expect(mainSource).not.toContain("auth.agent.loginId");
@@ -72,9 +68,9 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
     expect(mainSource).toContain("<strong>{displayedStaffName}</strong>");
   });
 
-  /** 수신음은 제거하되 백그라운드 브라우저 알림과 계정 기능은 유지해야 합니다. */
-  it("상단 메뉴에서 언어·무음 알림·비밀번호·로그아웃 기능을 유지한다", () => {
-    expect(mainSource).toContain("<LanguageSwitcher/>");
+  /** UI는 일본어로 고정하되 백그라운드 브라우저 알림과 계정 기능은 유지해야 합니다. */
+  it("상단 메뉴에서 언어 선택을 제거하고 알림·비밀번호·로그아웃 기능을 유지한다", () => {
+    expect(mainSource).not.toContain("LanguageSwitcher");
     expect(mainSource).toContain("notificationButtonLabel");
     expect(mainSource).toContain("onClick={() => void enableBrowserNotifications()}");
     expect(mainSource).toContain('onClick={() => setShowPasswordChange(true)}');
@@ -259,23 +255,15 @@ describe("Agent 채팅과 관리자 대시보드 레이아웃 회귀 방지", ()
     expect(styles).not.toContain(".line-conversation-placeholder > div");
   });
 
-  /** null은 전체 호텔, UUID 문자열은 특정 호텔이며 별도 select를 다시 만들지 않아야 합니다. */
-  it("전체 호텔 버튼을 첫 번째로 두고 null 필터를 API 생략값으로 사용한다", () => {
-    const chipsStart = mainSource.indexOf('<div className="hotel-chip-list">');
-    const chipsEnd = mainSource.indexOf("</div>", chipsStart);
-    const chips = mainSource.slice(chipsStart, chipsEnd);
-
-    expect(mainSource).toContain(
-      "useState<string | null>(null)",
-    );
-    expect(mainSource).toContain(
-      "listRooms(auth.accessToken, selectedHotelId ?? undefined)",
-    );
-    expect(chips.indexOf('t("전체 호텔")')).toBeLessThan(
-      chips.indexOf("hotels.map"),
-    );
-    expect(chips).toContain("setSelectedHotelId(null)");
-    expect(chips).toContain("setSelectedHotelId(hotel.id)");
-    expect(mainSource).not.toContain('className="filter"');
+  /** 별도 필터 바 없이 객실 추가용 호텔 선택창이 필터를 겸하며 목록은 20개 단위로 조회합니다. */
+  it("하단 호텔 선택창으로 필터링하고 객실 목록을 20개씩 페이지 이동한다", () => {
+    expect(mainSource).not.toContain('className="hotel-filter-bar"');
+    expect(styles).not.toContain(".hotel-filter-bar");
+    expect(mainSource).toContain("listRooms(auth.accessToken, roomHotelId || undefined, roomPage)");
+    expect(mainSource).toContain('onChange={(e) => { setRoomHotelId(e.target.value); setRoomPage(1); }}');
+    expect(mainSource).toContain('<option value="">{t("전체 호텔")}</option>');
+    expect(mainSource).toContain('className="admin-room-pagination"');
+    expect(mainSource).toContain("setRooms(r.items)");
+    expect(mainSource).toContain("setRoomTotalPages(r.totalPages)");
   });
 });

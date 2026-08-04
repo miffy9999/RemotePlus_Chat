@@ -1,0 +1,16 @@
+ALTER TABLE "Hotel" ADD COLUMN "logoUpdatedAt" TIMESTAMP(3);
+
+CREATE TABLE "HotelLogo" (
+  "hotelId" UUID NOT NULL,
+  "data" BYTEA NOT NULL,
+  "contentType" TEXT NOT NULL,
+  "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP(3) NOT NULL,
+
+  CONSTRAINT "HotelLogo_pkey" PRIMARY KEY ("hotelId")
+);
+
+ALTER TABLE "HotelLogo"
+ADD CONSTRAINT "HotelLogo_hotelId_fkey"
+FOREIGN KEY ("hotelId") REFERENCES "Hotel"("id")
+ON DELETE CASCADE ON UPDATE CASCADE;

@@ -25,4 +25,13 @@ describe("Agent 알림 표시 정책", () => {
       }),
     ).toBe(true);
   });
+
+  it("Log 화면을 보고 있으면 탭이 활성 상태여도 신규 Guest 알림을 허용한다", () => {
+    expect(
+      shouldNotifyAgent(
+        { visibilityState: "visible", hasFocus: () => true },
+        true,
+      ),
+    ).toBe(true);
+  });
 });

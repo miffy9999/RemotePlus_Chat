@@ -44,7 +44,7 @@ describe("직원 통합 로그인 API", () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ message: "로그인 정보가 올바르지 않습니다." }, 401));
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(loginStaff("unknown", "wrong")).rejects.toThrow("로그인 정보가 올바르지 않습니다.");
+    await expect(loginStaff("unknown", "wrong")).rejects.toThrow("認証情報が無効です。もう一度ログインしてください。");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

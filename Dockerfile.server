@@ -1,16 +1,31 @@
-FROM node:22-bookworm-slim
+FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl \
     && rm -rf /var/lib/apt/lists/*
 RUN corepack enable
 
-# pnpm workspace 의존성과 소스를 함께 복사해 Linux용 Prisma·bcrypt 바이너리를 이미지 안에서 생성합니다.
+# 빌드 단계에서만 전체 개발 도구를 설치해 Linux용 Prisma·bcrypt 바이너리와 NestJS 결과물을 생성한다.
+# deploy가 운영 node_modules를 새로 구성하므로 그 위치에서 Prisma Client를 다시 생성한다.
 COPY . .
 RUN pnpm install --frozen-lockfile \
     && pnpm --filter @hotel-chat/shared build \
     && pnpm --filter @hotel-chat/server prisma:generate \
-    && pnpm --filter @hotel-chat/server build
+    && pnpm --filter @hotel-chat/server build \
+    && pnpm --filter @hotel-chat/server deploy --prod --legacy /prod/server \
+    && cd /prod/server \
+    && ./node_modules/.bin/prisma generate --schema prisma/schema.prisma
+
+FROM node:22-bookworm-slim AS runtime
+
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends openssl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 운영 이미지에는 서버 실행·마이그레이션·최초 시드에 필요한 결과물과 운영 의존성만 복사한다.
+# 테스트 러너·Nest CLI·TypeScript 컴파일러를 제외해 Sakura VPS의 디스크와 공격 표면을 줄인다.
+COPY --from=builder /prod/server ./
+ENV NODE_ENV=production
 
 EXPOSE 4000
-CMD ["node", "apps/server/dist/src/main.js"]
+CMD ["node", "dist/src/main.js"]

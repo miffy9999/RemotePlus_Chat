@@ -1,0 +1,221 @@
+name: remoteplus-chat
+
+# Sakura VPS 2GB 한 대에서만 사용하는 운영 구성이다. 외부에는 Caddy의 80/443만 공개하고
+# API와 PostgreSQL은 Docker 내부망에 격리해 인터넷에서 직접 접근할 수 없게 한다.
+x-server-environment: &server-environment
+  NODE_ENV: production
+  TZ: Asia/Tokyo
+  SERVER_PORT: 4000
+  TRUST_PROXY_HOPS: 1
+  DATABASE_URL: postgresql://${POSTGRES_USER:?POSTGRES_USER is required}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:?POSTGRES_DB is required}?schema=public
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+  ACCESS_KEY_ENCRYPTION_SECRET: ${ACCESS_KEY_ENCRYPTION_SECRET:?ACCESS_KEY_ENCRYPTION_SECRET is required}
+  WEB_ORIGINS: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN is required},https://${AGENT_DOMAIN:?AGENT_DOMAIN is required},https://${GUEST_DOMAIN:?GUEST_DOMAIN is required}
+  AGENT_WEB_ORIGIN: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN is required}
+  GUEST_WEB_ORIGIN: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN is required}
+  GUEST_PUBLIC_URL: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN is required}/chat
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      # 작은 VPS에서 컨테이너 로그가 디스크를 계속 차지하지 않도록 파일 수와 크기를 제한한다.
+      max-size: "10m"
+      max-file: "3"
+  security_opt:
+    - no-new-privileges:true
+
+services:
+  postgres:
+    <<: *service-defaults
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      TZ: Asia/Tokyo
+      PGTZ: Asia/Tokyo
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    shm_size: 128m
+    mem_limit: 512m
+    # 2GB 서버에서 PostgreSQL이 과도한 연결·캐시로 다른 컨테이너를 밀어내지 않게 보수적으로 제한한다.
+    command:
+      - postgres
+      - -c
+      - max_connections=50
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - log_min_duration_statement=1000
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  migrate:
+    image: remoteplus-chat-server:${APP_VERSION:-latest}
+    environment: *server-environment
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["./node_modules/.bin/prisma", "migrate", "deploy", "--schema", "prisma/schema.prisma"]
+    restart: "no"
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
+
+  # 시드는 최초 구축 때 `deploy.sh --bootstrap`으로만 명시 실행한다. 일반 업데이트에는 실행하지 않아
+  # 사용자가 변경한 비밀번호나 고정 QR 접근키가 재배포 때문에 바뀌는 일을 막는다.
+  seed:
+    profiles: ["bootstrap"]
+    image: remoteplus-chat-server:${APP_VERSION:-latest}
+    environment:
+      <<: *server-environment
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?SEED_ADMIN_PASSWORD is required}
+      SEED_AGENT_PASSWORD: ${SEED_AGENT_PASSWORD:?SEED_AGENT_PASSWORD is required}
+      ALLOW_INSECURE_TEST_PASSWORDS: "false"
+      SEED_ROOM_ACCESS_KEY: ${SEED_ROOM_ACCESS_KEY:?SEED_ROOM_ACCESS_KEY is required}
+      SEED_SECOND_ROOM_ACCESS_KEY: ${SEED_SECOND_ROOM_ACCESS_KEY:?SEED_SECOND_ROOM_ACCESS_KEY is required}
+    networks:
+      - backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    command: ["./node_modules/.bin/tsx", "prisma/seed.ts"]
+    restart: "no"
+    mem_limit: 512m
+    security_opt:
+      - no-new-privileges:true
+
+  server:
+    <<: *service-defaults
+    image: remoteplus-chat-server:${APP_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    environment:
+      <<: *server-environment
+      # V8 힙 상한을 두어 메모리 이상 시 PostgreSQL과 프록시까지 함께 종료되는 상황을 줄인다.
+      NODE_OPTIONS: --max-old-space-size=384
+    expose:
+      - "4000"
+    networks:
+      - edge
+      - backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    init: true
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  agent-web:
+    <<: *service-defaults
+    image: remoteplus-chat-agent-web:${APP_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        APP_PATH: apps/agent-web
+        VITE_API_URL: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN is required}/api
+        VITE_SOCKET_URL: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN is required}/chat
+        VITE_BASE_PATH: /staff/
+    expose:
+      - "80"
+    networks:
+      - edge
+    depends_on:
+      server:
+        condition: service_healthy
+    mem_limit: 96m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  guest-web:
+    <<: *service-defaults
+    image: remoteplus-chat-guest-web:${APP_VERSION:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        APP_PATH: apps/guest-web
+        VITE_API_URL: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN is required}/api
+        VITE_SOCKET_URL: https://${PUBLIC_DOMAIN:?PUBLIC_DOMAIN is required}/chat
+        VITE_BASE_PATH: /chat/
+    expose:
+      - "80"
+    networks:
+      - edge
+    depends_on:
+      server:
+        condition: service_healthy
+    mem_limit: 96m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  caddy:
+    <<: *service-defaults
+    image: caddy:2-alpine
+    environment:
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:?PUBLIC_DOMAIN is required}
+      AGENT_DOMAIN: ${AGENT_DOMAIN:?AGENT_DOMAIN is required}
+      GUEST_DOMAIN: ${GUEST_DOMAIN:?GUEST_DOMAIN is required}
+      API_DOMAIN: ${API_DOMAIN:?API_DOMAIN is required}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - edge
+    depends_on:
+      agent-web:
+        condition: service_healthy
+      guest-web:
+        condition: service_healthy
+      server:
+        condition: service_healthy
+    mem_limit: 128m
+
+networks:
+  edge:
+  backend:
+    # DB 네트워크는 호스트 외부뿐 아니라 인터넷으로 나가는 경로도 막아 데이터 계층을 최소 권한으로 둔다.
+    internal: true
+
+volumes:
+  postgres-data:
+    name: remoteplus-chat-postgres-data
+  caddy-data:
+    name: remoteplus-chat-caddy-data
+  caddy-config:
+    name: remoteplus-chat-caddy-config

@@ -153,3 +153,20 @@ Phase 3A~5 코드 읽기 순서:
 5. 구현 후 단위·통합·E2E 테스트 중 관련 범위를 실행한다.
 6. `CHANGELOG_KO.md`에 수정 시각, 내용, 이유, 확인 결과를 기록한다.
 7. 설계가 달라졌다면 `08_System_Blueprint.md`도 갱신한다.
+
+## 9단계 — Sakura 운영 구조 이해
+
+읽을 파일:
+
+1. `compose.vps.yaml`
+2. `infra/caddy/Caddyfile`
+3. `.env.vps.example`
+4. `scripts/vps/`
+5. `14_Sakura_VPS_2GB_Deployment_Guide.md`
+
+확인할 질문:
+
+- 인터넷에 직접 공개되는 컨테이너와 포트는 무엇인가?
+- 일반 업데이트에서 운영 시드를 자동 실행하지 않는 이유는 무엇인가?
+- 마이그레이션 전에 DB 백업을 만들고 성공 뒤 API를 시작하는 경계는 어디인가?
+- 고정 QR을 유지하려면 DB 외에 어떤 암호화 키와 회사 도메인을 보존해야 하는가?

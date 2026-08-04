@@ -1,5 +1,52 @@
 # 프로젝트 변경 이력
 
+## 2026-08-03 12:43:53 +09:00
+
+### 수정 파일
+
+- 운영 이미지·의존성: `Dockerfile.server`, `Dockerfile.web`, `apps/server/package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`
+- VPS 구조·상태 점검: `compose.vps.yaml`, `scripts/vps/setup-ubuntu.sh`, `scripts/vps/health-check.sh`, `infra/caddy/Caddyfile`
+- 운영·QA 문서: `README.md`, `docs/12_Feature_Status.md`, `docs/13_Commercial_Release_Checklist_KO.md`, `docs/14_Sakura_VPS_2GB_Deployment_Guide.md`, `docs/15_Sakura_VPS_Whitebox_QA.md`
+
+### 수정 내용과 이유
+
+- Sakura 공식 사양에 맞춰 패킷 필터와 UFW 중복을 제거하고 UFW 단독 관리, IPv6 기본 비활성 유지, 2GB swap, HTTPS 서버 감시와 4GB 스케일업 기준을 확정했다.
+- Agent/Guest 웹 헬스 체크, 필수 컨테이너·OOM·디스크 85% 상태 검사와 메모리·CPU 출력을 추가했다.
+- pnpm 10.12.1에서 무시되던 `allowBuilds`를 호환되는 `onlyBuiltDependencies`로 교체해 Prisma, bcrypt, esbuild 설치 스크립트가 실제 Linux 빌드에서 실행되게 했다.
+- 웹 빌드는 필요한 앱과 shared 의존성만 설치하고, 서버는 다단계 빌드로 개발·테스트 도구를 제외해 이미지를 약 1.27GB에서 약 761MB로 축소했다.
+- 경량 이미지의 첫 동적 QA에서 deploy 후 Prisma Client가 빠지는 문제를 발견해 운영 node_modules에서 재생성하도록 수정했다.
+
+### 확인 방법
+
+- 1차 화이트박스 QA: Compose 공개 포트·내부망·헬스 체크 단언, Bash 문법, diff 검사, lint와 전체 169개 테스트를 통과했다.
+- 2차 화이트박스 QA: 세 운영 이미지 순차 빌드, Caddy format/validate, 임시 PostgreSQL의 15개 마이그레이션·시드, API 헬스, ADMIN/AGENT 로그인과 두 웹 응답을 통과했다.
+- 최종 전체 lint, 서버 59개·Agent 92개·Guest 18개 테스트와 프로덕션 빌드를 다시 통과했다. 유휴 임시 스택은 PostgreSQL 약 73MiB, API 약 58MiB, 두 웹 각각 약 12MiB를 사용했다.
+- `pnpm audit --prod`의 React Router RSC 경고는 공식 권고상 unstable RSC API 전용이며 현재 Vite SPA에는 해당하지 않음을 확인하고 상업 체크리스트에 기록했다.
+
+## 2026-08-03 12:20:48 +09:00
+
+### 수정 파일
+
+- VPS 운영 구성: `compose.vps.yaml`, `.env.vps.example`, `.gitattributes`, `.dockerignore`, `.gitignore`
+- HTTPS 프록시·자동 백업: `infra/caddy/Caddyfile`, `infra/systemd/remoteplus-chat-backup.service`, `infra/systemd/remoteplus-chat-backup.timer`
+- 서버 준비·배포·상태·백업·복구: `scripts/vps/setup-ubuntu.sh`, `deploy.sh`, `health-check.sh`, `backup-postgres.sh`, `restore-postgres.sh`
+- 실제 IP 처리: `apps/server/src/common/config/environment.ts`, `apps/server/src/main.ts`, `apps/server/tests/environment.spec.ts`, `.env.example`
+- 운영·설계 문서: `README.md`, `ROADMAP.md`, `docs/02_System_Architecture.md`, `docs/08_System_Blueprint.md`, `docs/09_Analysis_Roadmap.md`, `docs/12_Feature_Status.md`, `docs/13_Commercial_Release_Checklist_KO.md`, `docs/14_Sakura_VPS_2GB_Deployment_Guide.md`
+
+### 수정 내용과 이유
+
+- Sakura VPS 2GB 한 대에 Caddy, Agent/Guest 정적 웹, NestJS API/Socket.IO, PostgreSQL을 배치하는 운영 전용 Compose를 추가했다. 80/443만 공개하고 DB·API 포트를 외부에 발행하지 않으며 PostgreSQL은 내부 전용 네트워크에 격리했다.
+- 컨테이너 메모리 상한, Node.js 힙 상한, 소형 PostgreSQL 설정, 2GB swap과 서버·웹 이미지 순차 빌드로 2GB 환경의 순간 메모리 부족 가능성을 낮췄다.
+- 운영 시드를 최초 `--bootstrap`으로 분리해 일반 코드 업데이트가 직원의 변경 비밀번호나 고정 QR 접근키를 다시 초기화하지 않게 했다. 마이그레이션 전 자동 DB 백업, 일일 systemd 백업, 14일 로컬 보존과 확인형 복구 절차도 추가했다.
+- Caddy 한 단계의 신뢰 프록시 홉만 허용해 실제 접속 IP를 요청 제한과 보안 로그에 사용하면서 임의 전달 헤더의 영향을 제한했다.
+- Render DB와 암호화 키 이전, 회사 도메인 기반 고정 QR, 회사 외부 저장소 백업과 인수인계 조건을 한 문서에 정리했다.
+
+### 확인 방법
+
+- `docker compose --env-file .env.vps.example -f compose.vps.yaml config --quiet`, Git Bash의 `bash -n`과 `git diff --check`를 통과했다.
+- 전체 `pnpm lint`, 서버 59개·Agent 92개·Guest 18개 테스트, `pnpm build`를 통과했다.
+- 로컬 Docker Desktop 엔진이 실행 중이 아니어서 운영 이미지 실제 빌드는 수행하지 못했으며, VPS 최초 배포에서 `deploy.sh`의 순차 빌드와 `health-check.sh`로 최종 확인한다.
+
 ## 2026-07-24 15:35:00 +09:00
 
 ### 수정 파일

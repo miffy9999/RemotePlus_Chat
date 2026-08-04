@@ -1,0 +1,12 @@
+[Unit]
+Description=Run RemotePlus Chat PostgreSQL backup every day
+
+[Timer]
+# 호텔 업무가 비교적 적은 일본 시간 03:15에 실행하고, 서버가 꺼져 있었다면 다음 부팅 후 놓친 작업을 실행한다.
+OnCalendar=*-*-* 03:15:00 Asia/Tokyo
+Persistent=true
+RandomizedDelaySec=5m
+Unit=remoteplus-chat-backup.service
+
+[Install]
+WantedBy=timers.target

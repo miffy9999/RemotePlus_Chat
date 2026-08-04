@@ -8,6 +8,12 @@ import { CreateRoomDto } from "./dto/create-room.dto";
 import { UpdateHotelWelcomeMessageDto } from "./dto/update-hotel-welcome-message.dto";
 import { createOpaqueToken, sha256 } from "../../common/security/hash";
 import { decryptSecretOrNull, encryptSecret } from "../../common/security/encryption";
+import { detectHotelLogoContentType, MAX_HOTEL_LOGO_BYTES } from "./hotel-logo";
+
+interface UploadedHotelLogo {
+  buffer: Buffer;
+  size: number;
+}
 
 /** 관리자 MVP의 Agent·호텔·룸 조회와 생성을 담당하며 비밀번호 해시는 절대 응답하지 않는다. */
 @Injectable()
@@ -32,13 +38,32 @@ export class AdminService {
     return { deletedId: id };
   }
 
-  listHotels() { return this.prisma.hotel.findMany({ orderBy: { name: "asc" } }); }
+  async updateAgentStatus(id: string, status: "ACTIVE" | "INACTIVE") {
+    const agent = await this.prisma.agent.findFirst({ where: { id, role: "AGENT" }, select: { id: true } });
+    if (!agent) throw new NotFoundException("対象のAgentが見つかりません。");
+    return this.prisma.agent.update({ where: { id }, data: { status }, select: { id: true, name: true, loginId: true, role: true, status: true, createdAt: true } });
+  }
+
+  listHotels() { return this.prisma.hotel.findMany({ include: { welcomeMessages: { orderBy: { language: "asc" } } }, orderBy: { name: "asc" } }); }
 
   /** 동일한 이름도 운영상 혼동되므로 대소문자를 무시해 중복을 거부한다. */
   async createHotel(dto: CreateHotelDto) {
     const name = dto.name.trim();
     if (await this.prisma.hotel.findFirst({ where: { name: { equals: name, mode: "insensitive" } } })) throw new ConflictException("같은 이름의 호텔이 이미 있습니다.");
-    return this.prisma.hotel.create({ data: { name } });
+    return this.prisma.hotel.create({
+      data: {
+        name,
+        welcomeMessages: {
+          create: [
+            { language: "ja", message: `ようこそ、${name}へ。ご滞在中のお困りごとやご希望を、こちらへお気軽にお送りください。` },
+            { language: "en", message: `Welcome to ${name}. Please send us any questions or requests about your stay.` },
+            { language: "ko", message: `${name}에 오신 것을 환영합니다. 투숙 중 궁금한 점이나 요청 사항을 편하게 보내 주세요.` },
+            { language: "zh", message: `欢迎光临${name}。入住期间如有任何疑问或需求，请随时给我们留言。` },
+          ],
+        },
+      },
+      include: { welcomeMessages: { orderBy: { language: "asc" } } },
+    });
   }
 
   /**
@@ -51,9 +76,43 @@ export class AdminService {
     if (!(await this.prisma.hotel.findUnique({ where: { id }, select: { id: true } }))) {
       throw new NotFoundException("안내문을 수정할 호텔을 찾을 수 없습니다.");
     }
-    // 요청 언어를 Prisma 필드명으로 직접 사용하지 않고 분기해 임의 필드 갱신을 막습니다.
-    const data = dto.language === "en" ? { welcomeMessageEn: welcomeMessage } : { welcomeMessage };
-    return this.prisma.hotel.update({ where: { id }, data });
+    await this.prisma.hotelWelcomeMessage.upsert({
+      where: { hotelId_language: { hotelId: id, language: dto.language } },
+      create: { hotelId: id, language: dto.language, message: welcomeMessage },
+      update: { message: welcomeMessage },
+    });
+    return this.prisma.hotel.findUniqueOrThrow({ where: { id }, include: { welcomeMessages: { orderBy: { language: "asc" } } } });
+  }
+
+  /** 작은 로고 원본만 DB의 별도 테이블에 저장해 상담 목록 응답에는 바이너리가 섞이지 않게 합니다. */
+  async updateHotelLogo(id: string, file?: UploadedHotelLogo) {
+    if (!(await this.prisma.hotel.findUnique({ where: { id }, select: { id: true } }))) {
+      throw new NotFoundException("ロゴを設定するホテルが見つかりません。");
+    }
+    if (!file?.buffer?.length) throw new BadRequestException("ロゴ画像を選択してください。");
+    if (file.size > MAX_HOTEL_LOGO_BYTES) throw new BadRequestException("ロゴ画像は512KB以下にしてください。");
+    const contentType = detectHotelLogoContentType(file.buffer);
+    if (!contentType) throw new BadRequestException("PNG、JPEG、WebP形式の画像を選択してください。");
+    const logoUpdatedAt = new Date();
+    const logoData = Uint8Array.from(file.buffer);
+    return this.prisma.$transaction(async (transaction) => {
+      await transaction.hotelLogo.upsert({
+        where: { hotelId: id },
+        create: { hotelId: id, data: logoData, contentType },
+        update: { data: logoData, contentType },
+      });
+      return transaction.hotel.update({ where: { id }, data: { logoUpdatedAt } });
+    });
+  }
+
+  async deleteHotelLogo(id: string) {
+    if (!(await this.prisma.hotel.findUnique({ where: { id }, select: { id: true } }))) {
+      throw new NotFoundException("ロゴを削除するホテルが見つかりません。");
+    }
+    return this.prisma.$transaction(async (transaction) => {
+      await transaction.hotelLogo.deleteMany({ where: { hotelId: id } });
+      return transaction.hotel.update({ where: { id }, data: { logoUpdatedAt: null } });
+    });
   }
 
   /** 호텔 삭제는 DB 연쇄 삭제 규칙으로 하위 룸·접근키·상담·메시지를 한 작업에서 함께 제거합니다. */
@@ -65,9 +124,15 @@ export class AdminService {
   }
 
   /** 관리자 룸 목록에는 활성 접근 키를 복호화한 투숙객 주소를 포함하되 키 자체 필드는 노출하지 않습니다. */
-  async listRooms(hotelId?: string) {
-    const rooms = await this.prisma.room.findMany({ where: hotelId ? { hotelId } : undefined, include: { hotel: true, accessKeys: { where: { status: "ACTIVE" }, orderBy: { createdAt: "desc" }, take: 1 } }, orderBy: [{ hotel: { name: "asc" } }, { roomNumber: "asc" }] });
-    return rooms.map((room) => this.roomView(room));
+  async listRooms(hotelId?: string, requestedPage = 1) {
+    const pageSize = 20;
+    const where = hotelId ? { hotelId } : undefined;
+    const total = await this.prisma.room.count({ where });
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const normalizedPage = Number.isFinite(requestedPage) ? Math.trunc(requestedPage) : 1;
+    const page = Math.min(Math.max(normalizedPage, 1), totalPages);
+    const rooms = await this.prisma.room.findMany({ where, include: { hotel: true, accessKeys: { where: { status: "ACTIVE" }, orderBy: { createdAt: "desc" }, take: 1 } }, orderBy: [{ hotel: { name: "asc" } }, { roomNumber: "asc" }], skip: (page - 1) * pageSize, take: pageSize });
+    return { items: rooms.map((room) => this.roomView(room)), total, page, pageSize, totalPages };
   }
 
   async createRoom(dto: CreateRoomDto) {
@@ -78,6 +143,13 @@ export class AdminService {
       return this.roomView(room);
     }
     catch (error) { if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new ConflictException("해당 호텔에 같은 객실 번호가 이미 있습니다."); throw error; }
+  }
+
+  async updateRoomStatus(id: string, status: "ACTIVE" | "INACTIVE") {
+    const room = await this.prisma.room.findUnique({ where: { id }, select: { id: true } });
+    if (!room) throw new NotFoundException("対象の客室が見つかりません。");
+    const updated = await this.prisma.room.update({ where: { id }, data: { status }, include: { hotel: true, accessKeys: { where: { status: "ACTIVE" }, orderBy: { createdAt: "desc" }, take: 1 } } });
+    return this.roomView(updated);
   }
 
   /** 룸 삭제 시 접근키와 해당 룸의 상담·메시지가 연쇄 삭제되므로 관리자 확인 후에만 호출합니다. */

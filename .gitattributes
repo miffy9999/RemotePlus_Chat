@@ -1,0 +1,5 @@
+# Windows에서 작업해도 Ubuntu가 실행할 운영 스크립트와 서비스 파일은 LF 줄바꿈을 유지한다.
+*.sh text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
+infra/caddy/Caddyfile text eol=lf

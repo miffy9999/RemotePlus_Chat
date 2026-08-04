@@ -1,6 +1,8 @@
 # Hotel Call Center Chat
 
 Vercel + Render 무료 테스트 배포 절차는 [`docs/12_Free_Deployment_Guide.md`](docs/12_Free_Deployment_Guide.md)를 참고하세요.
+Sakura VPS 2GB 운영·이전 절차는 [`docs/14_Sakura_VPS_2GB_Deployment_Guide.md`](docs/14_Sakura_VPS_2GB_Deployment_Guide.md)를 참고하세요.
+Sakura 최적화 화이트박스 QA 결과는 [`docs/15_Sakura_VPS_Whitebox_QA.md`](docs/15_Sakura_VPS_Whitebox_QA.md)를 참고하세요.
 
 상업 출시 전 점검 항목은 [`docs/13_Commercial_Release_Checklist_KO.md`](docs/13_Commercial_Release_Checklist_KO.md), 오픈소스 고지는 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)를 참고하세요.
 

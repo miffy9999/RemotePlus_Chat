@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query, Req, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import type { Request } from "express";
 import { AuthService } from "../auth/auth.service";
 import { requireStaff } from "../auth/request-auth";
@@ -7,6 +8,7 @@ import { CreateAgentDto } from "./dto/create-agent.dto";
 import { CreateHotelDto } from "./dto/create-hotel.dto";
 import { CreateRoomDto } from "./dto/create-room.dto";
 import { UpdateHotelWelcomeMessageDto } from "./dto/update-hotel-welcome-message.dto";
+import { UpdateRecordStatusDto } from "./dto/update-record-status.dto";
 
 /** `/admin` 아래의 모든 API는 각 요청마다 ADMIN 역할 JWT를 다시 검사한다. */
 @Controller("admin")
@@ -16,6 +18,7 @@ export class AdminController {
   private async authorize(request: Request): Promise<void> { await requireStaff(request, this.auth, ["ADMIN"]); }
   @Get("agents") async listAgents(@Req() req: Request) { await this.authorize(req); return this.admin.listAgents(); }
   @Post("agents") async createAgent(@Req() req: Request, @Body() dto: CreateAgentDto) { await this.authorize(req); return this.admin.createAgent(dto); }
+  @Patch("agents/:id/status") async updateAgentStatus(@Req() req: Request, @Param("id", new ParseUUIDPipe()) id: string, @Body() dto: UpdateRecordStatusDto) { await this.authorize(req); return this.admin.updateAgentStatus(id, dto.status); }
   @Delete("agents/:id") async deleteAgent(@Req() req: Request, @Param("id", new ParseUUIDPipe()) id: string) { await this.authorize(req); return this.admin.deleteAgent(id); }
   @Get("hotels") async listHotels(@Req() req: Request) { await this.authorize(req); return this.admin.listHotels(); }
   @Post("hotels") async createHotel(@Req() req: Request, @Body() dto: CreateHotelDto) { await this.authorize(req); return this.admin.createHotel(dto); }
@@ -25,8 +28,20 @@ export class AdminController {
     await this.authorize(req);
     return this.admin.updateHotelWelcomeMessage(id, dto);
   }
+  @Put("hotels/:id/logo")
+  @UseInterceptors(FileInterceptor("logo", { limits: { files: 1, fileSize: 512 * 1024 } }))
+  async updateHotelLogo(@Req() req: Request, @Param("id", new ParseUUIDPipe()) id: string, @UploadedFile() file?: { buffer: Buffer; size: number }) {
+    await this.authorize(req);
+    return this.admin.updateHotelLogo(id, file);
+  }
+  @Delete("hotels/:id/logo")
+  async deleteHotelLogo(@Req() req: Request, @Param("id", new ParseUUIDPipe()) id: string) {
+    await this.authorize(req);
+    return this.admin.deleteHotelLogo(id);
+  }
   @Delete("hotels/:id") async deleteHotel(@Req() req: Request, @Param("id", new ParseUUIDPipe()) id: string) { await this.authorize(req); return this.admin.deleteHotel(id); }
-  @Get("rooms") async listRooms(@Req() req: Request, @Query("hotelId") hotelId?: string) { await this.authorize(req); return this.admin.listRooms(hotelId); }
+  @Get("rooms") async listRooms(@Req() req: Request, @Query("hotelId") hotelId?: string, @Query("page") page?: string) { await this.authorize(req); return this.admin.listRooms(hotelId, Number(page ?? 1)); }
   @Post("rooms") async createRoom(@Req() req: Request, @Body() dto: CreateRoomDto) { await this.authorize(req); return this.admin.createRoom(dto); }
+  @Patch("rooms/:id/status") async updateRoomStatus(@Req() req: Request, @Param("id", new ParseUUIDPipe()) id: string, @Body() dto: UpdateRecordStatusDto) { await this.authorize(req); return this.admin.updateRoomStatus(id, dto.status); }
   @Delete("rooms/:id") async deleteRoom(@Req() req: Request, @Param("id", new ParseUUIDPipe()) id: string) { await this.authorize(req); return this.admin.deleteRoom(id); }
 }

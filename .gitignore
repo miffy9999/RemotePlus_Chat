@@ -1,6 +1,8 @@
 .env
 .env.*
 !.env.example
+!.env.vps.example
+backups/
 node_modules/
 dist/
 build/

@@ -41,3 +41,26 @@ export interface ChatMessageView extends SendChatMessage {
   messageType: "TEXT";
   createdAt: string;
 }
+
+const JAPANESE_HTTP_ERRORS: Record<number, string> = {
+  400: "入力内容を確認してください。",
+  401: "認証情報が無効です。もう一度ログインしてください。",
+  403: "この操作を行う権限がありません。",
+  404: "指定されたデータが見つかりません。",
+  409: "ほかの操作と重複しました。画面を更新してもう一度お試しください。",
+  413: "画像のサイズが大きすぎます。512KB以下の画像を選択してください。",
+  429: "リクエストが多すぎます。しばらくしてからもう一度お試しください。",
+};
+
+/** 서버·브라우저의 한국어/영어 원문을 일본 운영 화면에 그대로 노출하지 않습니다. */
+export function toJapaneseUserMessage(message: unknown, status?: number): string {
+  const text = typeof message === "string" ? message.trim() : "";
+  if (status !== undefined && JAPANESE_HTTP_ERRORS[status]) return JAPANESE_HTTP_ERRORS[status];
+  if (/リクエストが多すぎ|メッセージの送信が多すぎ/.test(text)) return JAPANESE_HTTP_ERRORS[429];
+  if (/요청이 너무 많|메시지를 너무 빠르게|too many requests/i.test(text)) return JAPANESE_HTTP_ERRORS[429];
+  // 이미 일본어로 정리된 서버 메시지는 구체적인 안내를 보존합니다.
+  if (/[ぁ-んァ-ヶ]/.test(text)) return text;
+  if (status !== undefined && status >= 500) return "サーバーでエラーが発生しました。しばらくしてからもう一度お試しください。";
+  if (!text || /failed to fetch|networkerror|network request failed/i.test(text)) return "サーバーに接続できません。通信状態を確認してもう一度お試しください。";
+  return "処理を完了できませんでした。もう一度お試しください。";
+}

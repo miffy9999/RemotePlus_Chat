@@ -45,9 +45,33 @@ model Hotel {
   name             String
   welcomeMessage   String       @default("こんにちは。ホテルのカスタマーサポートです。ご用件をメッセージでお送りください。")
   welcomeMessageEn String       @default("Hello. This is the hotel customer support team. Please send us your request.")
+  logoUpdatedAt    DateTime?
   status           RecordStatus @default(ACTIVE)
   createdAt        DateTime     @default(now())
   rooms            Room[]
+  logo             HotelLogo?
+  welcomeMessages  HotelWelcomeMessage[]
+}
+
+model HotelWelcomeMessage {
+  hotelId   String   @db.Uuid
+  language  String
+  message   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  hotel     Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@id([hotelId, language])
+  @@index([language])
+}
+
+model HotelLogo {
+  hotelId     String   @id @db.Uuid
+  data        Bytes
+  contentType String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  hotel       Hotel    @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 }
 
 model Room {
