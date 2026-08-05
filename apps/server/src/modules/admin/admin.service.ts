@@ -90,7 +90,7 @@ export class AdminService {
       throw new NotFoundException("ロゴを設定するホテルが見つかりません。");
     }
     if (!file?.buffer?.length) throw new BadRequestException("ロゴ画像を選択してください。");
-    if (file.size > MAX_HOTEL_LOGO_BYTES) throw new BadRequestException("ロゴ画像は512KB以下にしてください。");
+    if (file.size > MAX_HOTEL_LOGO_BYTES) throw new BadRequestException("ロゴ画像は2MB以下にしてください。");
     const contentType = detectHotelLogoContentType(file.buffer);
     if (!contentType) throw new BadRequestException("PNG、JPEG、WebP形式の画像を選択してください。");
     const logoUpdatedAt = new Date();

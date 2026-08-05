@@ -29,7 +29,7 @@ export class AdminController {
     return this.admin.updateHotelWelcomeMessage(id, dto);
   }
   @Put("hotels/:id/logo")
-  @UseInterceptors(FileInterceptor("logo", { limits: { files: 1, fileSize: 512 * 1024 } }))
+  @UseInterceptors(FileInterceptor("logo", { limits: { files: 1, fileSize: 2 * 1024 * 1024 } }))
   async updateHotelLogo(@Req() req: Request, @Param("id", new ParseUUIDPipe()) id: string, @UploadedFile() file?: { buffer: Buffer; size: number }) {
     await this.authorize(req);
     return this.admin.updateHotelLogo(id, file);

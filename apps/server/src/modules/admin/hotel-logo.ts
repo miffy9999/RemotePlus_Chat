@@ -1,4 +1,4 @@
-export const MAX_HOTEL_LOGO_BYTES = 512 * 1024;
+export const MAX_HOTEL_LOGO_BYTES = 2 * 1024 * 1024;
 
 /** 확장자와 브라우저 MIME 표시는 신뢰하지 않고 실제 파일 시그니처로 허용 형식을 판별합니다. */
 export function detectHotelLogoContentType(data: Buffer): "image/png" | "image/jpeg" | "image/webp" | null {

@@ -18,6 +18,11 @@ describe("hotel room operations UI", () => {
     expect(mainSource).toContain('code: "ko"');
     expect(mainSource).toContain('code: "zh"');
     expect(mainSource).toContain("hotel?.welcomeMessages.find");
+    expect(mainSource).toContain('className="welcome-language-select"');
+    expect(mainSource).not.toContain('className="welcome-language-tabs"');
+    expect(mainSource).toContain("{selectedHotel && (");
+    expect(mainSource).toContain("2 * 1024 * 1024");
+    expect(styles).toContain(".admin-logo-layout");
   });
 
   it("uses actual status controls and removes the decorative composer plus", () => {

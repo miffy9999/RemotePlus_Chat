@@ -2534,54 +2534,57 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         <span>{roomPage} / {roomTotalPages}<small>{roomTotal}{t("개 객실")}</small></span>
         <button type="button" className="secondary compact" disabled={roomPage >= roomTotalPages} onClick={() => setRoomPage((page) => Math.min(roomTotalPages, page + 1))}>{t("다음")}</button>
       </nav>
+      {selectedHotel && (
+      <>
       <section className="admin-logo-section">
         <div className="section-head">
           <div><span className="section-eyebrow">HOTEL LOGO</span><h2>{t("호텔 로고")}</h2></div>
-          {selectedHotel ? (
-            <HotelAvatar
-              hotel={selectedHotel}
-              fallback={selectedHotel.name.slice(0, 1)}
-              className="admin-hotel-logo-preview"
-            />
-          ) : null}
         </div>
         {logoError && <div className="error-box form-error">{logoError}</div>}
-        <form className="admin-logo-form" onSubmit={saveHotelLogo}>
-          <label>
-            {t("로고 이미지")}
-            <input
-              key={`${roomHotelId}-${selectedHotel?.logoUpdatedAt ?? "empty"}`}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              disabled={!roomHotelId || logoBusy}
-              onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                if (file && file.size > 512 * 1024) {
-                  setLogoFile(null);
-                  setLogoError("ロゴ画像は512KB以下にしてください。");
-                  return;
-                }
-                setLogoError("");
-                setLogoFile(file);
-              }}
-            />
-          </label>
-          <small>{t("PNG·JPEG·WebP, 최대 512KB")}</small>
-          <div>
-            <button disabled={!roomHotelId || !logoFile || logoBusy}>
-              {t(selectedHotel?.logoUpdatedAt ? "로고 변경" : "로고 등록")}
-            </button>
-            {selectedHotel?.logoUpdatedAt && (
-              <button type="button" className="secondary" disabled={logoBusy} onClick={() => void removeHotelLogo()}>
-                {t("로고 삭제")}
-              </button>
-            )}
+        <div className="admin-logo-layout">
+          <div className="admin-logo-current">
+            <small>{t("현재 로고")}</small>
+            <HotelAvatar hotel={selectedHotel} fallback={selectedHotel.name.slice(0, 1)} className="admin-hotel-logo-preview" />
+            <strong>{selectedHotel.name}</strong>
           </div>
-        </form>
+          <form className="admin-logo-form" onSubmit={saveHotelLogo}>
+            <label className="admin-logo-file">
+              <span>{t("로고 이미지")}</span>
+              <input
+                key={`${roomHotelId}-${selectedHotel?.logoUpdatedAt ?? "empty"}`}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                disabled={!roomHotelId || logoBusy}
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  if (file && file.size > 2 * 1024 * 1024) {
+                    setLogoFile(null);
+                    setLogoError("ロゴ画像は2MB以下にしてください。");
+                    return;
+                  }
+                  setLogoError("");
+                  setLogoFile(file);
+                }}
+              />
+              <span className="admin-logo-file-picker"><strong>{t("파일 선택")}</strong><em>{logoFile?.name ?? t("선택된 파일 없음")}</em></span>
+            </label>
+            <small>{t("PNG·JPEG·WebP, 최대 2MB")}</small>
+            <div>
+              <button disabled={!roomHotelId || !logoFile || logoBusy}>
+                {t(selectedHotel?.logoUpdatedAt ? "로고 변경" : "로고 등록")}
+              </button>
+              {selectedHotel?.logoUpdatedAt && (
+                <button type="button" className="secondary" disabled={logoBusy} onClick={() => void removeHotelLogo()}>
+                  {t("로고 삭제")}
+                </button>
+              )}
+            </div>
+          </form>
+        </div>
       </section>
       <section className="admin-welcome-section">
         <div className="section-head">
-          <div><span className="section-eyebrow">GUEST MESSAGE</span><h2>{t("호텔별 Guest 자동 안내문")}</h2><p>{t("위에서 선택한 호텔의 신규 상담 첫 메시지를 언어별로 설정합니다.")}</p></div>
+          <div><span className="section-eyebrow">GUEST MESSAGE</span><h2>{t("호텔별 Guest 자동 안내문")}</h2></div>
           <div className="welcome-selected-hotel" aria-live="polite">
             <small>{t("현재 선택 호텔")}</small>
             <strong>{selectedHotel?.name ?? t("선택된 호텔 없음")}</strong>
@@ -2590,15 +2593,17 @@ function AdminPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
         {welcomeError && <div className="error-box form-error">{welcomeError}</div>}
         {welcomeSaved && <div className="success-box">{welcomeSaved}</div>}
         <form className="welcome-form" onSubmit={saveWelcomeMessage}>
-          <div className="welcome-language-tabs" role="tablist" aria-label={t("안내문 언어")}>
-            {WELCOME_LANGUAGES.map((item) => (
-              <button key={item.code} type="button" className={welcomeLanguage === item.code ? "active" : ""} onClick={() => setWelcomeLanguage(item.code)}>{item.label}</button>
-            ))}
-          </div>
+          <label className="welcome-language-select">{t("안내문 언어")}
+            <select value={welcomeLanguage} onChange={(event) => setWelcomeLanguage(event.target.value as WelcomeLanguage)}>
+              {WELCOME_LANGUAGES.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
+            </select>
+          </label>
           <label>{WELCOME_LANGUAGES.find((item) => item.code === welcomeLanguage)?.inputLabel}<textarea value={welcomeMessage} onChange={(event) => { setWelcomeMessage(event.target.value); setWelcomeSaved(""); }} maxLength={1000} rows={5}/></label>
           <div className="welcome-actions"><span>{welcomeMessage.length}/1000</span><button disabled={!roomHotelId || !welcomeMessage.trim()}>{t("안내문 저장")}</button></div>
         </form>
       </section>
+      </>
+      )}
       </section>
       </>
       )}
