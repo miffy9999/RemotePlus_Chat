@@ -26,6 +26,7 @@ import {
   listSessionLogs,
   listSessions,
   loginStaff,
+  markSessionRead,
   hotelLogoUrl,
   openSession,
   type AdminAgentView,
@@ -68,6 +69,13 @@ import {
 } from "./notification-utils";
 import { shouldNotifyAgent } from "./agent-notification-policy";
 import { createTitleFlasher, type TitleFlasher } from "./title-flasher";
+import {
+  clearUnreadConversation,
+  incrementUnreadConversation,
+  reconcileUnreadConversations,
+  synchronizeUnreadConversations,
+  totalUnreadMessages,
+} from "./unread-conversations";
 import {
   ADMIN_AGENT_WORKSPACE_PATH,
   ADMIN_DASHBOARD_PATH,
@@ -707,10 +715,16 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       : Notification.permission,
   );
   const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [unreadConversations, setUnreadConversations] = useState<
+    ReadonlyMap<string, number>
+  >(() => new Map());
   const [sidebarWidth, setSidebarWidth] = useState(() =>
     readAgentSidebarWidth(window.localStorage, window.innerWidth),
   );
   const knownWaitingIds = useRef<Set<string> | null>(null);
+  const selectedSessionIdRef = useRef<string | null>(null);
+  const unreadConversationsRef = useRef<ReadonlyMap<string, number>>(new Map());
+  const seenGuestMessageIdsRef = useRef(new Set<string>());
   const activeSessionsRef = useRef<Map<string, SessionView>>(new Map());
   const notificationSocketRef = useRef<Socket | null>(null);
   const titleFlasherRef = useRef<TitleFlasher | null>(null);
@@ -723,10 +737,19 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     startWidth: number;
   } | null>(null);
   const sidebarWidthRef = useRef(sidebarWidth);
+  const unreadMessageTotal = totalUnreadMessages(unreadConversations);
+
+  useEffect(() => {
+    unreadConversationsRef.current = unreadConversations;
+  }, [unreadConversations]);
 
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
+
+  useEffect(() => {
+    selectedSessionIdRef.current = selected?.id ?? null;
+  }, [selected?.id]);
 
   useEffect(() => {
     sidebarWidthRef.current = sidebarWidth;
@@ -750,27 +773,69 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     });
     titleFlasherRef.current = flasher;
 
-    const stopWhenVisible = () => {
-      if (document.visibilityState === "visible") flasher.stop();
-    };
-    const stopWhenFocused = () => flasher.stop();
-    document.addEventListener("visibilitychange", stopWhenVisible);
-    window.addEventListener("focus", stopWhenFocused);
-
     return () => {
-      document.removeEventListener("visibilitychange", stopWhenVisible);
-      window.removeEventListener("focus", stopWhenFocused);
       flasher.stop();
       titleFlasherRef.current = null;
     };
   }, []);
 
-  function announce(nextNotice: AgentNotice): void {
-    // Current 화면을 직접 보는 중에는 중복 팝업을 막되, Log 화면에서는 새 Guest 상담을 놓치지 않게 표시합니다.
-    if (!shouldNotifyAgent(document, modeRef.current === "log")) return;
+  useEffect(() => {
+    const flasher = titleFlasherRef.current;
+    if (!flasher) return;
+    if (unreadMessageTotal === 0) {
+      flasher.stop();
+      return;
+    }
+    flasher.start(`新規トーク：トーク(${unreadMessageTotal})`, true);
+  }, [unreadMessageTotal]);
+
+  useEffect(() => {
+    const markVisibleConversationRead = () => {
+      const sessionId = selectedSessionIdRef.current;
+      if (
+        sessionId &&
+        modeRef.current === "current" &&
+        document.visibilityState === "visible" &&
+        document.hasFocus()
+      ) {
+        void markConversationReadShared(sessionId);
+      }
+    };
+    document.addEventListener("visibilitychange", markVisibleConversationRead);
+    window.addEventListener("focus", markVisibleConversationRead);
+    return () => {
+      document.removeEventListener("visibilitychange", markVisibleConversationRead);
+      window.removeEventListener("focus", markVisibleConversationRead);
+    };
+  }, []);
+
+  function announce(nextNotice: AgentNotice, forceInApp = false): void {
+    // 다른 상담방의 메시지는 현재 화면에 포커스가 있어도 앱 안에서 알려줍니다.
+    if (!forceInApp && !shouldNotifyAgent(document, modeRef.current === "log")) return;
     setNotice(nextNotice);
-    titleFlasherRef.current?.start(nextNotice.title);
     showSystemNotification(nextNotice.title, nextNotice.body, nextNotice.id);
+  }
+
+  async function markConversationReadShared(
+    sessionId: string,
+    forceServerUpdate = false,
+  ): Promise<void> {
+    if (!forceServerUpdate && !unreadConversationsRef.current.has(sessionId)) return;
+    setUnreadConversations((current) => {
+      const next = clearUnreadConversation(current, sessionId);
+      unreadConversationsRef.current = next;
+      return next;
+    });
+    try {
+      await markSessionRead(auth.accessToken, sessionId);
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : t("읽음 상태를 저장하지 못했습니다."),
+      );
+      await refresh();
+    }
   }
 
   async function refresh(): Promise<void> {
@@ -779,7 +844,8 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     try {
       // 5초 업무 폴링에서는 완료 Log를 제외해 로그가 늘어도 반복 응답 크기가 증가하지 않게 합니다.
       const data = await listSessions(auth.accessToken, "OPEN");
-      const newWaiting = findNewWaitingSessions(knownWaitingIds.current, data);
+      const previousWaitingIds = knownWaitingIds.current;
+      const newWaiting = findNewWaitingSessions(previousWaitingIds, data);
       knownWaitingIds.current = waitingSessionIds(data);
       const assignedActive = data.filter(
         (session) =>
@@ -788,6 +854,36 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       );
       activeSessionsRef.current = new Map(
         assignedActive.map((session) => [session.id, session]),
+      );
+      const openSessionIds = new Set([
+        ...data
+          .filter((session) => session.status === "WAITING")
+          .map((session) => session.id),
+        ...assignedActive.map((session) => session.id),
+      ]);
+      const newlyUnreadSessionIds =
+        previousWaitingIds === null
+          ? data
+              .filter((session) => session.status === "WAITING")
+              .map((session) => session.id)
+          : newWaiting.map((session) => session.id);
+      const hasSharedServerReadState = data.every(
+        (session) => typeof session.unreadCount === "number",
+      );
+      setUnreadConversations((current) =>
+        hasSharedServerReadState
+          ? synchronizeUnreadConversations(
+              current,
+              data.map((session) => ({
+                sessionId: session.id,
+                count: session.unreadCount ?? 0,
+              })),
+            )
+          : reconcileUnreadConversations(
+              current,
+              openSessionIds,
+              newlyUnreadSessionIds,
+            ),
       );
       if (notificationSocketRef.current?.connected) {
         assignedActive.forEach((session) =>
@@ -807,12 +903,15 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
               ? ` · 他${newWaiting.length - 1}件`
               : ` · 외 ${newWaiting.length - 1}건`
             : "";
-        announce({
-          id: `waiting-${first.id}-${Date.now()}`,
-          title: t("새 상담이 도착했습니다."),
-          body: `${first.room.hotel.name} · ${first.room.roomNumber}${language === "ja" ? "号室" : "호"}${additional}`,
-          actionLabel: t("대기 상담 보기"),
-        });
+        announce(
+          {
+            id: `waiting-${first.id}-${Date.now()}`,
+            title: t("새 상담이 도착했습니다."),
+            body: `${first.room.hotel.name} · ${first.room.roomNumber}${language === "ja" ? "号室" : "호"}${additional}`,
+            actionLabel: t("대기 상담 보기"),
+          },
+          true,
+        );
       }
     } catch {
       refreshFailureCount.current = nextRefreshFailureCount(
@@ -856,10 +955,32 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     socket.on("chat:inbox-updated", () => void refresh());
     socket.on("chat:session-updated", applyRealtimeSession);
     socket.on("chat:session-closed", applyRealtimeSession);
+    socket.on(
+      "chat:session-read",
+      (payload: { sessionId?: string; staffId?: string }) => {
+        const sessionId = payload.sessionId;
+        if (
+          payload.staffId !== auth.agent.id ||
+          typeof sessionId !== "string"
+        ) return;
+        setUnreadConversations((current) => {
+          const next = clearUnreadConversation(current, sessionId);
+          unreadConversationsRef.current = next;
+          return next;
+        });
+      },
+    );
     socket.on("chat:message", (message: MessageView) => {
       if (message.senderType !== "GUEST") return;
+      if (seenGuestMessageIdsRef.current.has(message.id)) return;
+      seenGuestMessageIdsRef.current.add(message.id);
       const session = activeSessionsRef.current.get(message.sessionId);
       if (!session) return;
+      const isViewingConversation =
+        selectedSessionIdRef.current === message.sessionId &&
+        modeRef.current === "current" &&
+        document.visibilityState === "visible" &&
+        document.hasFocus();
       setSessions((items) =>
         items.map((item) =>
           item.id === message.sessionId
@@ -871,11 +992,24 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
             : item,
         ),
       );
-      announce({
-        id: `message-${message.id}`,
-        title: t("고객 메시지가 도착했습니다."),
-        body: `${session.room.hotel.name} · ${session.room.roomNumber}${language === "ja" ? "号室" : "호"} · ${notificationPreview(message.content)}`,
-      });
+      if (!isViewingConversation) {
+        setUnreadConversations((current) => {
+          const next = incrementUnreadConversation(current, message.sessionId);
+          unreadConversationsRef.current = next;
+          return next;
+        });
+      } else {
+        // 열어둔 방에서 바로 본 메시지도 서버 읽음 시각을 갱신해 다음 폴링 때 다시 미확인으로 나타나지 않게 합니다.
+        void markConversationReadShared(message.sessionId, true);
+      }
+      announce(
+        {
+          id: `message-${message.id}`,
+          title: t("고객 메시지가 도착했습니다."),
+          body: `${session.room.hotel.name} · ${session.room.roomNumber}${language === "ja" ? "号室" : "호"} · ${notificationPreview(message.content)}`,
+        },
+        !isViewingConversation,
+      );
     });
     void refresh();
     const timer = window.setInterval(() => void refresh(), 5000);
@@ -947,10 +1081,6 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
       ),
     [auth.agent.id, isAdminView, sessions],
   );
-  const waitingSessionCount = useMemo(
-    () => currentSessions.filter((session) => session.status === "WAITING").length,
-    [currentSessions],
-  );
   const hotels = useMemo(
     () =>
       [
@@ -990,11 +1120,15 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
     try {
       // ADMIN은 전체 상담을 특별 조회만 하며 WAITING 상담을 자기 담당으로 가져오지 않습니다.
       if (isAdminView) {
+        selectedSessionIdRef.current = session.id;
         setSelected(session);
+        void markConversationReadShared(session.id, true);
         return;
       }
       const opened = session.status === "WAITING" ? await openSession(auth.accessToken, session.id) : session;
+      selectedSessionIdRef.current = opened.id;
       setSelected(opened);
+      void markConversationReadShared(opened.id, true);
       await refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : t("대화를 열지 못했습니다."));
@@ -1016,12 +1150,17 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
   function showWaitingList(): void {
     setNotice(null);
     setMode("current");
+    clearSelectedConversation();
+  }
+
+  function clearSelectedConversation(): void {
+    selectedSessionIdRef.current = null;
     setSelected(null);
   }
 
   function changeMode(nextMode: "current" | "log"): void {
     setMode(nextMode);
-    setSelected(null);
+    clearSelectedConversation();
     if (nextMode === "log") setLogPage(1);
   }
 
@@ -1154,14 +1293,9 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           {/* 공통 사용자 메뉴를 제거해 상담 탭부터 목록 영역이 바로 시작됩니다. */}
           <div className="line-inbox-tabs">
             <button className={mode === "current" ? "active" : ""} onClick={() => changeMode("current")}>
-              {t("Current chat room")} <em>{currentSessions.length}</em>
-              {waitingSessionCount > 0 && (
-                <span className="line-unread-badge" aria-label={`${waitingSessionCount}件の新着相談`}>
-                  {waitingSessionCount > 99 ? "99+" : waitingSessionCount}
-                </span>
-              )}
+              {t("Current chat room")}
             </button>
-            <button className={mode === "log" ? "active" : ""} onClick={() => changeMode("log")}>{t("Log")} <em>{logTotal}</em></button>
+            <button className={mode === "log" ? "active" : ""} onClick={() => changeMode("log")}>{t("Log")}</button>
           </div>
           <label className="line-search"><span>⌕</span><input value={search} onChange={(event) => { setSearch(event.target.value); if (mode === "log") setLogPage(1); }} placeholder={t("대화방, 메시지 검색")}/></label>
           <div className="line-filters">
@@ -1178,7 +1312,9 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
                 <span><strong>{session.room.hotel.name} · {session.room.roomNumber}{t("호")}</strong><small>{session.lastMessage?.content ?? t(session.status === "WAITING" ? "새 문의가 도착했습니다." : session.status)}</small><em>{session.language.toUpperCase()} · {t("담당 상담원")}: {session.agent?.name ?? t("담당자 없음")}</em></span>
                 <span className="line-conversation-meta">
                   <time>{new Date(session.lastMessage?.createdAt ?? session.createdAt).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })}</time>
-                  {session.status === "WAITING" ? <span className="line-chat-badge" aria-label="新着相談1件">1</span> : null}
+                  {unreadConversations.has(session.id) ? (
+                    <span className="line-chat-badge" aria-label="未読メッセージあり" />
+                  ) : null}
                 </span>
               </button>
             ))}
@@ -1187,14 +1323,14 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
             <nav className="line-log-pagination" aria-label={t("상담 Log 페이지")}>
               <button
                 disabled={logLoading || logPage <= 1}
-                onClick={() => { setSelected(null); setLogPage((page) => Math.max(1, page - 1)); }}
+                onClick={() => { clearSelectedConversation(); setLogPage((page) => Math.max(1, page - 1)); }}
               >
                 {t("이전")}
               </button>
               <span><strong>{logPage}</strong> / {logTotalPages}<small>{logTotal}{t("건")}</small></span>
               <button
                 disabled={logLoading || logPage >= logTotalPages}
-                onClick={() => { setSelected(null); setLogPage((page) => Math.min(logTotalPages, page + 1)); }}
+                onClick={() => { clearSelectedConversation(); setLogPage((page) => Math.min(logTotalPages, page + 1)); }}
               >
                 {t("다음")}
               </button>
@@ -1216,7 +1352,7 @@ function LineAgentPage({ auth }: { auth: AgentAuth }): React.JSX.Element {
           onPointerCancel={finishSidebarResize}
           onKeyDown={resizeSidebarWithKeyboard}
         />
-        {selected ? <LineConversationPanel auth={auth} initial={selected} readOnly={isAdminView || mode === "log" || TERMINAL_SESSION_STATUSES.includes(selected.status)} adminReadOnly={isAdminView} onBack={() => setSelected(null)} onChanged={updateSelectedConversation}/> : <section className="line-conversation-placeholder"><h2>{t(mode === "current" ? "대화를 선택하세요" : "상담 기록을 선택하세요")}</h2><p>{t(isAdminView ? "관리자는 전체 상담을 읽기 전용으로 조회할 수 있습니다." : mode === "current" ? "왼쪽 목록에서 Guest 문의를 열면 상담이 시작됩니다." : "모든 Agent의 종료 상담을 읽기 전용으로 확인할 수 있습니다.")}</p></section>}
+        {selected ? <LineConversationPanel auth={auth} initial={selected} readOnly={isAdminView || mode === "log" || TERMINAL_SESSION_STATUSES.includes(selected.status)} adminReadOnly={isAdminView} onBack={clearSelectedConversation} onChanged={updateSelectedConversation}/> : <section className="line-conversation-placeholder"><h2>{t(mode === "current" ? "대화를 선택하세요" : "상담 기록을 선택하세요")}</h2><p>{t(isAdminView ? "관리자는 전체 상담을 읽기 전용으로 조회할 수 있습니다." : mode === "current" ? "왼쪽 목록에서 Guest 문의를 열면 상담이 시작됩니다." : "모든 Agent의 종료 상담을 읽기 전용으로 확인할 수 있습니다.")}</p></section>}
         {notice && <AgentNoticePopup notice={notice} onClose={() => setNotice(null)} onAction={showWaitingList}/>}
         {showPasswordChange && <PasswordChangeModal auth={auth} onClose={() => setShowPasswordChange(false)}/>}
       </div>

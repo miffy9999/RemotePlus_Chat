@@ -197,8 +197,7 @@ table { width: 100%; border-collapse: collapse; } th, td { padding: 15px 12px; t
 .line-inbox-tabs button { position: relative; padding: 16px 4px 13px; color: #7d8591; background: transparent; border-radius: 0; box-shadow: none; font-size: 12px; }
 .line-inbox-tabs button:hover { transform: none; box-shadow: none; }.line-inbox-tabs button.active { color: #17202e; }
 .line-inbox-tabs button.active::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 3px; border-radius: 3px 3px 0 0; background: #08b64c; }
-.line-inbox-tabs em { display: inline-grid; place-items: center; min-width: 20px; height: 20px; margin-left: 5px; padding: 0 6px; color: #fff; background: #9aa2ad; border-radius: 999px; font-size: 9px; font-style: normal; }.line-inbox-tabs .active em { background: #08b64c; }
-.line-inbox-tabs .line-unread-badge,.line-chat-badge { min-width: 21px; height: 21px; display: inline-grid; place-items: center; padding: 0 6px; color: #fff; background: #d93232; border-radius: 999px; font-size: 10px; font-weight: 850; line-height: 1; }
+.line-chat-badge { width: 10px; min-width: 10px; height: 10px; display: inline-block; padding: 0; background: #e1262f; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px rgba(225,38,47,.12); }
 .line-search { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; margin: 13px 15px 8px; padding: 0 13px; color: #a5abb3; background: #f4f5f6; border-radius: 10px; }
 .line-search span { font-size: 25px; transform: rotate(-15deg); }.line-search input { min-width: 0; padding: 13px 0; border: 0; outline: 0; background: transparent; }
 .line-filters { display: grid; grid-template-columns: 1fr 1fr auto; gap: 7px; padding: 0 15px 11px; border-bottom: 1px solid #edf0f2; }

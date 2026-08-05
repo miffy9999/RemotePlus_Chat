@@ -216,11 +216,52 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
         : {}),
     } satisfies Prisma.ChatSessionFindManyArgs;
     const sessions = await this.prisma.chatSession.findMany(query);
+    const openSessions = sessions.filter((session) =>
+      ["WAITING", "ACTIVE"].includes(session.status),
+    );
+    const readAtBySession = new Map<string, number>();
+    const unreadBySession = new Map<string, number>();
+    if (openSessions.length > 0) {
+      const openSessionIds = openSessions.map((session) => session.id);
+      // 메시지 원문을 5초마다 Node.js로 가져오지 않고 PostgreSQL에서 상담별 개수만 집계해 2GB VPS 메모리와 네트워크를 아낍니다.
+      const unreadRows = await this.prisma.$queryRaw<
+        Array<{ sessionId: string; unreadCount: number; hasRead: boolean }>
+      >(Prisma.sql`
+        SELECT
+          session."id" AS "sessionId",
+          COUNT(message."id")::integer AS "unreadCount",
+          (read."agentId" IS NOT NULL) AS "hasRead"
+        FROM "ChatSession" AS session
+        LEFT JOIN "ConversationRead" AS read
+          ON read."sessionId" = session."id"
+          AND read."agentId" = ${requester.sub}::uuid
+        LEFT JOIN "Message" AS message
+          ON message."sessionId" = session."id"
+          AND message."senderType" = 'GUEST'
+          AND message."createdAt" > COALESCE(read."lastReadAt", TIMESTAMP '1970-01-01')
+        WHERE session."id" IN (${Prisma.join(openSessionIds)})
+        GROUP BY session."id", read."agentId"
+      `);
+      for (const row of unreadRows) {
+        unreadBySession.set(row.sessionId, row.unreadCount);
+        if (row.hasRead) readAtBySession.set(row.sessionId, 1);
+      }
+    }
     const items = sessions.map((session) => {
       const { messages, ...withoutMessages } = session;
+      let unreadCount = unreadBySession.get(session.id) ?? 0;
+      // 상담이 생성됐지만 Guest의 첫 메시지가 아직 저장되기 전인 짧은 구간도 새 상담으로 표시합니다.
+      if (
+        session.status === "WAITING" &&
+        !readAtBySession.has(session.id) &&
+        unreadCount === 0
+      ) {
+        unreadCount = 1;
+      }
       return {
         ...toPublicSession(withoutMessages),
         lastMessage: messages[0] ?? null,
+        unreadCount,
       };
     });
     if (page === undefined || pageSize === undefined) return items;
@@ -343,6 +384,27 @@ export class ChatSessionsService implements OnModuleInit, OnModuleDestroy {
     const session = await this.findOrThrow(id);
     this.assertCanRead(session, staff, guestToken);
     return this.prisma.message.findMany({ where: { sessionId: id }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+  }
+
+  /** 같은 직원 계정을 사용하는 모든 PC가 공유할 서버 기준 읽음 시각을 저장합니다. */
+  async markRead(id: string, staff: StaffTokenPayload) {
+    const session = await this.findOrThrow(id);
+    this.assertCanRead(session, staff);
+    const lastReadAt = new Date();
+    await this.prisma.conversationRead.upsert({
+      where: {
+        agentId_sessionId: { agentId: staff.sub, sessionId: id },
+      },
+      create: { agentId: staff.sub, sessionId: id, lastReadAt },
+      update: { lastReadAt },
+    });
+    const payload = {
+      sessionId: id,
+      staffId: staff.sub,
+      lastReadAt: lastReadAt.toISOString(),
+    };
+    this.events.emit("chat.session.read", payload);
+    return { ...payload, unreadCount: 0 as const };
   }
 
   /** WebSocket 연결 단계에서 투숙객 불투명 토큰과 상담 ID의 결합을 검증합니다. */

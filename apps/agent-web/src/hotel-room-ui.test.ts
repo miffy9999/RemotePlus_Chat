@@ -5,10 +5,17 @@ const mainSource = readFileSync(new URL("./main.tsx", import.meta.url), "utf8");
 const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
 
 describe("hotel room operations UI", () => {
-  it("shows hotel logos and LINE-style new consultation badges", () => {
+  it("shows hotel logos and LINE-style unread conversation dots", () => {
     expect(mainSource).toContain("function HotelAvatar");
-    expect(mainSource).toContain('className="line-unread-badge"');
     expect(mainSource).toContain('className="line-chat-badge"');
+    expect(mainSource).toContain("unreadConversations.has(session.id)");
+    expect(mainSource).not.toContain('className="line-unread-badge"');
+    expect(mainSource).not.toContain("<em>{currentSessions.length}</em>");
+    expect(mainSource).not.toContain("<em>{logTotal}</em>");
+    expect(mainSource).toContain("新規トーク：トーク(${unreadMessageTotal})");
+    expect(mainSource).toContain("markSessionRead(auth.accessToken, sessionId)");
+    expect(mainSource).toContain("markConversationReadShared(message.sessionId, true)");
+    expect(mainSource).toContain('"chat:session-read"');
     expect(styles).toContain(".line-room-avatar img");
   });
 

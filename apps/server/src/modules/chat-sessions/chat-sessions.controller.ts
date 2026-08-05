@@ -74,4 +74,10 @@ export class AgentChatSessionsController {
   async open(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request) {
     return this.sessions.open(id, await requireStaff(request, this.auth, ["AGENT"]));
   }
+
+  /** 같은 로그인 계정을 사용하는 모든 PC에 공유할 읽음 상태를 기록합니다. */
+  @Post(":sessionId/read")
+  async markRead(@Param("sessionId", new ParseUUIDPipe()) id: string, @Req() request: Request) {
+    return this.sessions.markRead(id, await requireStaff(request, this.auth, ["AGENT", "ADMIN"]));
+  }
 }

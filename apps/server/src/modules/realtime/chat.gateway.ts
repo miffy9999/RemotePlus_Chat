@@ -62,6 +62,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
       // 전체 상태 동기화 방과 새 문의 알림 방을 한 번의 연결 처리에서 함께 구독해 중복 구현을 피합니다.
       void socket.join(this.staffRoom());
       void socket.join(this.staffInboxRoom);
+      void socket.join(this.staffAccountRoom(identity.staff.sub));
     }
   }
 
@@ -123,6 +124,14 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
     this.server.to(this.staffInboxRoom).emit(CHAT_EVENTS.inboxUpdated, payload);
   }
 
+  /** 한 PC에서 읽은 상담을 같은 직원 계정으로 로그인한 다른 PC에도 즉시 전달합니다. */
+  @OnEvent("chat.session.read")
+  sessionRead(payload: { sessionId: string; staffId: string; lastReadAt: string }): void {
+    this.server
+      .to(this.staffAccountRoom(payload.staffId))
+      .emit(CHAT_EVENTS.sessionRead, payload);
+  }
+
   private identity(socket: Socket): RealtimeIdentity {
     const identity = socket.data.identity as RealtimeIdentity | undefined;
     if (!identity) throw new Error("인증된 연결이 아닙니다.");
@@ -131,6 +140,7 @@ export class ChatGateway implements OnGatewayInit, OnGatewayConnection, OnGatewa
 
   private room(sessionId: string): string { return `session:${sessionId}`; }
   private staffRoom(): string { return "staff:all"; }
+  private staffAccountRoom(staffId: string): string { return `staff:account:${staffId}`; }
 
   private emitError(socket: Socket, error: unknown) {
     const message = error instanceof HttpException ? String(error.getResponse() instanceof Object ? (error.getResponse() as any).message : error.message) : error instanceof Error ? error.message : "チャットの処理中にエラーが発生しました。";

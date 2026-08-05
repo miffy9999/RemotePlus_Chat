@@ -21,6 +21,7 @@ export interface SessionView {
   closedAt: string | null;
   createdAt: string;
   lastActivityAt?: string;
+  unreadCount?: number;
   lastMessage?: MessageView | null;
   room: { roomNumber: string; hotel: { id: string; name: string; logoUpdatedAt?: string | null } };
 }
@@ -247,6 +248,14 @@ export function createHotel(token: string, name: string) { return request<HotelV
 /** 선택 호텔의 언어별 Guest 첫 안내문을 이후 신규 상담에 적용합니다. */
 export function updateHotelWelcomeMessage(token: string, id: string, language: string, welcomeMessage: string) {
   return request<HotelView>(`/admin/hotels/${id}/welcome-message`, { method: "PATCH", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ language, welcomeMessage }) });
+}
+
+/** 같은 직원 계정의 모든 PC가 공유할 상담방 읽음 상태를 서버에 기록합니다. */
+export function markSessionRead(token: string, sessionId: string) {
+  return request<{ sessionId: string; staffId: string; lastReadAt: string; unreadCount: 0 }>(
+    `/agent/chat-sessions/${sessionId}/read`,
+    { method: "POST", headers: { authorization: `Bearer ${token}` } },
+  );
 }
 export function uploadHotelLogo(token: string, id: string, file: File) {
   const form = new FormData();

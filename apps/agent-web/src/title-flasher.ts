@@ -10,7 +10,7 @@ interface IntervalHost {
 }
 
 export interface TitleFlasher {
-  start: (alertTitle: string) => void;
+  start: (alertTitle: string, allowFocused?: boolean) => void;
   stop: () => void;
 }
 
@@ -31,9 +31,9 @@ export function createTitleFlasher(documentTarget: TitleDocument, intervalHost: 
     documentTarget.title = originalTitle;
   }
 
-  function start(nextAlertTitle: string): void {
-    // 현재 보고 있는 화면에서는 앱 내부 팝업으로 충분하므로 비활성 탭에서만 제목 타이머를 사용합니다.
-    if (documentTarget.visibilityState === "visible" && documentTarget.hasFocus()) return;
+  function start(nextAlertTitle: string, allowFocused = false): void {
+    // 다른 상담방의 읽지 않은 메시지는 현재 탭에 있어도 제목으로 알려야 하므로 호출부에서 강제 표시할 수 있습니다.
+    if (!allowFocused && documentTarget.visibilityState === "visible" && documentTarget.hasFocus()) return;
     alertTitle = nextAlertTitle;
     showAlert = true;
     documentTarget.title = alertTitle;

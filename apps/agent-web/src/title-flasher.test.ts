@@ -10,6 +10,14 @@ describe("새 채팅 탭 제목 알림", () => {
     expect(documentTarget.title).toBe("RemotePlus Agent");
   });
 
+  it("다른 상담방의 읽지 않은 메시지는 현재 탭에서도 제목을 깜빡인다", () => {
+    const documentTarget = { title: "RemotePlus Agent", visibilityState: "visible" as const, hasFocus: () => true };
+    const intervalHost = { setInterval: vi.fn(() => 9), clearInterval: vi.fn() };
+    createTitleFlasher(documentTarget, intervalHost).start("新規トーク：トーク(2)", true);
+    expect(intervalHost.setInterval).toHaveBeenCalledTimes(1);
+    expect(documentTarget.title).toBe("新規トーク：トーク(2)");
+  });
+
   it("비활성 탭 제목을 1초마다 교대하고 확인하면 원래 제목으로 복구한다", () => {
     const documentTarget = { title: "RemotePlus Agent", visibilityState: "hidden" as const, hasFocus: () => false };
     let tick: () => void = () => undefined;

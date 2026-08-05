@@ -18,6 +18,7 @@ export const CHAT_EVENTS = {
   sessionUpdated: "chat:session-updated",
   sessionClosed: "chat:session-closed",
   inboxUpdated: "chat:inbox-updated",
+  sessionRead: "chat:session-read",
   error: "chat:error",
 } as const;
 

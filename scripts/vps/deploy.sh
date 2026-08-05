@@ -45,6 +45,9 @@ fi
 "${compose[@]}" up -d postgres
 "${compose[@]}" up -d migrate
 "${compose[@]}" up -d server agent-web guest-web caddy
+# Docker may assign the recreated API container a new internal IP. Reload Caddy
+# after every deployment so API and Socket.IO traffic never targets the old IP.
+"${compose[@]}" restart caddy
 
 if [[ "${BOOTSTRAP}" == true ]]; then
   # 운영 시드는 최초 빈 DB 구축에서만 명시적으로 실행한다. 업데이트 배포에서는 절대 자동 실행하지 않는다.
